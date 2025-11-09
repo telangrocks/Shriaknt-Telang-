@@ -6,6 +6,7 @@ import TradesTab from '../components/TradesTab'
 import AnalyticsTab from '../components/AnalyticsTab'
 import UsersTab from '../components/UsersTab'
 import { api } from '../services/api'
+import { AUTH_TOKEN_KEY, REFRESH_TOKEN_KEY } from '../constants/auth'
 
 const Dashboard = ({ setIsAuthenticated }) => {
   const [activeTab, setActiveTab] = useState('overview')
@@ -32,7 +33,8 @@ const Dashboard = ({ setIsAuthenticated }) => {
   }
 
   const handleLogout = () => {
-    localStorage.removeItem('admin_token')
+    localStorage.removeItem(AUTH_TOKEN_KEY)
+    localStorage.removeItem(REFRESH_TOKEN_KEY)
     setIsAuthenticated(false)
   }
 
