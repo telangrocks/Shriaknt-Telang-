@@ -1,0 +1,92 @@
+{
+  "name": "cryptopulse-trading-bot",
+  "description": "AI-powered cryptocurrency trading bot system",
+  "services": [
+    {
+      "name": "backend-api",
+      "type": "service",
+      "source": {
+        "type": "git",
+        "repository": "your-git-repository-url",
+        "branch": "main",
+        "buildCommand": "cd backend-services && npm ci --only=production",
+        "startCommand": "cd backend-services && npm start",
+        "dockerfile": "backend-services/Dockerfile"
+      },
+      "resources": {
+        "cpu": 1000,
+        "memory": 2048
+      },
+      "scaling": {
+        "minReplicas": 2,
+        "maxReplicas": 10,
+        "targetCPU": 70,
+        "targetMemory": 80
+      },
+      "ports": [
+        {
+          "port": 3000,
+          "protocol": "http"
+        }
+      ],
+      "healthCheck": {
+        "path": "/health",
+        "interval": 30,
+        "timeout": 5,
+        "retries": 3
+      },
+      "environment": {
+        "NODE_ENV": "production",
+        "PORT": "3000"
+      },
+      "addons": [
+        {
+          "name": "postgresql",
+          "type": "postgresql",
+          "version": "15",
+          "plan": "standard"
+        },
+        {
+          "name": "redis",
+          "type": "redis",
+          "version": "7",
+          "plan": "standard"
+        }
+      ]
+    }
+  ],
+  "domains": [
+    {
+      "service": "backend-api",
+      "domain": "api.yourdomain.com",
+      "tls": true
+    }
+  ],
+  "environmentVariables": {
+    "DATABASE_URL": "${postgresql.DATABASE_URL}",
+    "REDIS_URL": "${redis.REDIS_URL}",
+    "JWT_SECRET": "${JWT_SECRET}",
+    "REFRESH_TOKEN_SECRET": "${REFRESH_TOKEN_SECRET}",
+    "TWILIO_ACCOUNT_SID": "${TWILIO_ACCOUNT_SID}",
+    "TWILIO_AUTH_TOKEN": "${TWILIO_AUTH_TOKEN}",
+    "TWILIO_PHONE_NUMBER": "${TWILIO_PHONE_NUMBER}",
+    "CASHFREE_APP_ID": "${CASHFREE_APP_ID}",
+    "CASHFREE_SECRET_KEY": "${CASHFREE_SECRET_KEY}",
+    "CASHFREE_WEBHOOK_SECRET": "${CASHFREE_WEBHOOK_SECRET}",
+    "CASHFREE_ENV": "production",
+    "API_BASE_URL": "https://api.yourdomain.com",
+    "ALLOWED_ORIGINS": "https://dashboard.yourdomain.com,https://your-mobile-app.com",
+    "TRIAL_DAYS": "5",
+    "MONTHLY_PRICE": "999",
+    "CURRENCY": "INR",
+    "AI_MIN_CONFIDENCE": "75",
+    "AI_TARGET_PROFITABILITY": "85",
+    "AI_SCAN_INTERVAL": "5000",
+    "AI_SIGNAL_EXPIRY": "300000",
+    "MAX_CONCURRENT_TRADES": "10",
+    "SUPPORTED_EXCHANGES": "binance,bybit,okx",
+    "ENCRYPTION_KEY": "${ENCRYPTION_KEY}",
+    "LOG_LEVEL": "info"
+  }
+}
+

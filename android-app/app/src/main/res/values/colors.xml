@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="brand_primary">#2269F5</color>
+    <color name="brand_primary_variant">#1A4CCB</color>
+    <color name="brand_surface">#121725</color>
+    <color name="brand_surface_variant">#1C2235</color>
+    <color name="brand_error">#B3261E</color>
+    <color name="brand_on_error">#FFFFFF</color>
+    <color name="brand_on_surface">#F6F7FF</color>
+    <color name="brand_outline">#2A3350</color>
+</resources>
+

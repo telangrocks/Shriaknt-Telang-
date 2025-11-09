@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Cryptopulse</string>
+    <string name="splash_tagline">Sign in to continue to your account</string>
+    <string name="auth_request_button">Send OTP</string>
+    <string name="auth_verify_button">Verify OTP</string>
+    <string name="auth_phone_hint">+1 555 123 4567</string>
+    <string name="auth_otp_hint">000000</string>
+    <string name="auth_requesting_otp">Requesting OTP…</string>
+    <string name="auth_verifying_otp">Verifying OTP…</string>
+    <string name="auth_error_network">Network error. Please check your connection.</string>
+    <string name="auth_error_invalid_phone">Please enter a valid phone number.</string>
+    <string name="auth_error_invalid_otp">Please enter the 6-digit OTP.</string>
+    <string name="auth_registration_heading">Register your phone</string>
+    <string name="auth_registration_subheading">Step 1 of 2 · We will text a one-time passcode</string>
+    <string name="auth_phone_label">Phone Number</string>
+    <string name="auth_otp_label">Step 2 of 2 · Enter OTP</string>
+    <string name="auth_retry">Retry</string>
+    <string name="auth_phone_instructions">OTP will be sent to this number. Include country code.</string>
+    <string name="auth_otp_instruction">Enter the 6-digit code we just sent you.</string>
+    <string name="auth_existing_session_message">You're already signed in. Taking you to your dashboard...</string>
+    <string name="auth_otp_sent_message">OTP sent successfully. Please enter the 6-digit code.</string>
+    <string name="auth_login_success_message">Phone verified. Signing you in...</string>
+</resources>
+
