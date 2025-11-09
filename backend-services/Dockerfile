@@ -4,10 +4,11 @@ FROM node:18-alpine AS builder
 WORKDIR /app
 
 # Copy package files
-COPY package*.json ./
+COPY package.json yarn.lock .yarnrc.yml ./
 
 # Install dependencies
-RUN npm ci --only=production
+RUN corepack enable \
+  && yarn install --immutable --mode=skip-build --production=true --cwd /app
 
 # Production stage
 FROM node:18-alpine
