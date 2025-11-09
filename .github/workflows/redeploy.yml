@@ -1,0 +1,56 @@
+name: Build & Deploy Services
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+
+      - name: Enable Corepack (Yarn)
+        run: corepack enable
+
+      - name: Install backend dependencies
+        working-directory: backend-services
+        run: yarn install --immutable --mode=skip-build
+
+      - name: Run backend tests
+        working-directory: backend-services
+        run: yarn test --runInBand
+
+      - name: Install dashboard dependencies
+        working-directory: web-dashboard
+        run: yarn install --immutable --mode=skip-build
+
+      - name: Build dashboard
+        working-directory: web-dashboard
+        run: yarn run build
+
+      - name: Trigger Northflank deployment
+        if: ${{ secrets.NORTHFLANK_API_TOKEN != '' }}
+        env:
+          NORTHFLANK_API_TOKEN: ${{ secrets.NORTHFLANK_API_TOKEN }}
+          NORTHFLANK_SERVICE_ID: ${{ secrets.NORTHFLANK_SERVICE_ID }}
+        run: |
+          curl -X POST \
+            -H "Authorization: Bearer ${NORTHFLANK_API_TOKEN}" \
+            -H "Content-Type: application/json" \
+            https://api.northflank.com/v1/projects/${NORTHFLANK_SERVICE_ID}/deployments \
+            -d '{ "action": "REDEPLOY" }'
+
+      - name: Notify missing deployment secrets
+        if: ${{ secrets.NORTHFLANK_API_TOKEN == '' }}
+        run: |
+          echo "Set NORTHFLANK_API_TOKEN and NORTHFLANK_SERVICE_ID secrets to auto-trigger redeploys." >&2
+
