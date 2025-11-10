@@ -2,11 +2,9 @@ package com.cryptopulse.app.repository
 
 import android.content.Context
 import com.cryptopulse.app.network.ApiClient
+import com.cryptopulse.app.network.model.FirebaseLoginRequest
 import com.cryptopulse.app.network.model.RefreshTokenRequest
 import com.cryptopulse.app.network.model.RefreshTokenResponse
-import com.cryptopulse.app.network.model.RequestOtpRequest
-import com.cryptopulse.app.network.model.RequestOtpResponse
-import com.cryptopulse.app.network.model.VerifyOtpRequest
 import com.cryptopulse.app.network.model.VerifyOtpResponse
 import com.cryptopulse.app.utils.PreferenceManager
 import kotlinx.coroutines.delay
@@ -18,17 +16,10 @@ class AuthRepository(context: Context) {
     private val api = ApiClient.apiService
     private val preferences = PreferenceManager(context.applicationContext)
 
-    suspend fun requestOtp(phone: String): RequestOtpResponse {
-        return executeWithRetry { api.requestOtp(RequestOtpRequest(phone = phone)) }
-    }
-
-    suspend fun verifyOtp(phone: String, otp: String): VerifyOtpResponse {
+    suspend fun loginWithFirebase(idToken: String): VerifyOtpResponse {
         val response = executeWithRetry {
-            api.verifyOtp(
-                VerifyOtpRequest(
-                    phone = phone,
-                    otp = otp
-                )
+            api.firebaseLogin(
+                FirebaseLoginRequest(idToken = idToken)
             )
         }
 
@@ -36,7 +27,7 @@ class AuthRepository(context: Context) {
             preferences.putString(KEY_ACCESS_TOKEN, response.token)
             preferences.putString(KEY_REFRESH_TOKEN, response.refreshToken.orEmpty())
             preferences.putString(KEY_USER_ID, response.user?.id.orEmpty())
-            preferences.putString(KEY_USER_PHONE, response.user?.phone ?: phone)
+            preferences.putString(KEY_USER_PHONE, response.user?.phone.orEmpty())
             preferences.putBoolean(KEY_IS_LOGGED_IN, true)
             preferences.putBoolean(KEY_IS_NEW_USER, response.user?.isNewUser ?: false)
         }

@@ -107,20 +107,19 @@ class RegistrationActivity : AppCompatActivity() {
             hideStatus()
             lastTriggeredAction = TriggeredAction.RequestOtp
             val phone = binding.etPhone.text.toString()
-            viewModel.requestOTP(phone)
+            viewModel.requestOTP(this, phone)
         }
 
         binding.btnVerifyOtp.setOnClickListener {
             hideStatus()
             lastTriggeredAction = TriggeredAction.VerifyOtp
-            val phone = binding.etPhone.text.toString()
             val otp = binding.etOtp.text.toString()
-            viewModel.verifyOTP(phone, otp)
+            viewModel.verifyOTP(otp)
         }
 
         binding.btnRetry.setOnClickListener {
             hideStatus()
-            viewModel.retryLastAction()
+            viewModel.retryLastAction(this)
         }
     }
 

@@ -27,6 +27,10 @@ data class VerifyOtpResponse(
     val error: String? = null
 )
 
+data class FirebaseLoginRequest(
+    val idToken: String
+)
+
 data class VerifiedUser(
     val id: String,
     val phone: String,

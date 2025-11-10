@@ -1,10 +1,16 @@
 package com.cryptopulse.app.viewmodel
 
 import android.app.Application
+import android.app.Activity
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.viewModelScope
+import com.google.firebase.FirebaseException
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.auth.PhoneAuthCredential
+import com.google.firebase.auth.PhoneAuthOptions
+import com.google.firebase.auth.PhoneAuthProvider
 import com.cryptopulse.app.repository.AuthRepository
 import kotlinx.coroutines.launch
 import org.json.JSONObject
@@ -13,6 +19,7 @@ import java.io.IOException
 import java.net.ConnectException
 import java.net.SocketTimeoutException
 import java.net.UnknownHostException
+import java.util.concurrent.TimeUnit
 
 class AuthViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -34,71 +41,64 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
     val error: LiveData<String?> = _error
 
     private var lastAction: PendingAction = PendingAction.None
+    private val firebaseAuth: FirebaseAuth = FirebaseAuth.getInstance()
+    private var verificationId: String? = null
+    private var resendToken: PhoneAuthProvider.ForceResendingToken? = null
+    private var currentPhone: String? = null
 
-    fun requestOTP(rawPhone: String) {
+    fun requestOTP(activity: Activity, rawPhone: String) {
         val phone = rawPhone.trim()
         if (!isPhoneValid(phone)) {
             _error.value = INVALID_PHONE_MESSAGE
             return
         }
+
+        if (currentPhone != phone) {
+            verificationId = null
+            resendToken = null
+        }
+        currentPhone = phone
 
         lastAction = PendingAction.RequestOtp(phone)
-        viewModelScope.launch {
-            _isLoading.value = true
-            try {
-                val response = repository.requestOtp(phone)
-                if (response.success) {
-                    _otpSent.value = true
-                    _otpMessage.value = response.message
-                    _error.value = null
-                } else {
-                    handleError(response.message ?: response.error ?: GENERIC_OTP_ERROR)
-                }
-            } catch (ex: Exception) {
-                handleError(resolveError(ex))
-            } finally {
-                _isLoading.value = false
-            }
+        _isLoading.value = true
+        _error.value = null
+
+        val optionsBuilder = PhoneAuthOptions.newBuilder(firebaseAuth)
+            .setPhoneNumber(phone)
+            .setTimeout(60L, TimeUnit.SECONDS)
+            .setActivity(activity)
+            .setCallbacks(phoneAuthCallbacks)
+
+        resendToken?.let { token ->
+            optionsBuilder.setForceResendingToken(token)
         }
+
+        PhoneAuthProvider.verifyPhoneNumber(optionsBuilder.build())
     }
 
-    fun verifyOTP(rawPhone: String, rawOtp: String) {
-        val phone = rawPhone.trim()
+    fun verifyOTP(rawOtp: String) {
         val otp = rawOtp.trim()
-
-        if (!isPhoneValid(phone)) {
-            _error.value = INVALID_PHONE_MESSAGE
-            return
-        }
-
         if (!isOtpValid(otp)) {
             _error.value = INVALID_OTP_MESSAGE
             return
         }
 
-        lastAction = PendingAction.VerifyOtp(phone, otp)
-        viewModelScope.launch {
-            _isLoading.value = true
-            try {
-                val response = repository.verifyOtp(phone, otp)
-                if (response.success && !response.token.isNullOrBlank()) {
-                    _loginSuccess.value = true
-                    _error.value = null
-                } else {
-                    handleError(response.message ?: response.error ?: GENERIC_VERIFY_ERROR)
-                }
-            } catch (ex: Exception) {
-                handleError(resolveError(ex))
-            } finally {
-                _isLoading.value = false
-            }
+        val storedVerificationId = verificationId
+        if (storedVerificationId.isNullOrBlank()) {
+            _error.value = GENERIC_VERIFY_ERROR
+            return
         }
+
+        lastAction = PendingAction.VerifyOtp(currentPhone.orEmpty(), otp)
+        _isLoading.value = true
+        val credential = PhoneAuthProvider.getCredential(storedVerificationId, otp)
+        signInWithCredential(credential)
     }
 
-    fun retryLastAction() {
+    fun retryLastAction(activity: Activity) {
         when (val action = lastAction) {
-            is PendingAction.RequestOtp -> requestOTP(action.phone)
-            is PendingAction.VerifyOtp -> verifyOTP(action.phone, action.otp)
+            is PendingAction.RequestOtp -> requestOTP(activity, action.phone)
+            is PendingAction.VerifyOtp -> verifyOTP(action.otp)
             PendingAction.None -> {
                 // Nothing to retry
             }
@@ -175,5 +175,68 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
         private const val HOST_UNREACHABLE_MESSAGE = "Cannot reach Cryptopulse servers. Check your internet connection or API configuration."
         private const val REQUEST_TIMEOUT_MESSAGE = "The server took too long to respond. Please try again."
         private const val CONNECTION_FAILED_MESSAGE = "Unable to establish a connection. Please retry."
+    }
+
+    private val phoneAuthCallbacks = object : PhoneAuthProvider.OnVerificationStateChangedCallbacks() {
+        override fun onVerificationCompleted(credential: PhoneAuthCredential) {
+            signInWithCredential(credential)
+        }
+
+        override fun onVerificationFailed(e: FirebaseException) {
+            _isLoading.postValue(false)
+            handleError(e.localizedMessage ?: GENERIC_OTP_ERROR)
+        }
+
+        override fun onCodeSent(verificationId: String, token: PhoneAuthProvider.ForceResendingToken) {
+            this@AuthViewModel.verificationId = verificationId
+            this@AuthViewModel.resendToken = token
+            _isLoading.postValue(false)
+            _otpSent.postValue(true)
+            _otpMessage.postValue("OTP sent successfully. Please enter the 6-digit code.")
+            _error.postValue(null)
+        }
+    }
+
+    private fun signInWithCredential(credential: PhoneAuthCredential) {
+        _isLoading.postValue(true)
+        firebaseAuth.signInWithCredential(credential)
+            .addOnCompleteListener { authTask ->
+                if (!authTask.isSuccessful) {
+                    _isLoading.postValue(false)
+                    handleError(authTask.exception?.localizedMessage ?: GENERIC_VERIFY_ERROR)
+                    return@addOnCompleteListener
+                }
+
+                val user = authTask.result?.user
+                user?.getIdToken(true)
+                    ?.addOnCompleteListener { tokenTask ->
+                        if (!tokenTask.isSuccessful || tokenTask.result?.token.isNullOrBlank()) {
+                            _isLoading.postValue(false)
+                            handleError(tokenTask.exception?.localizedMessage ?: GENERIC_VERIFY_ERROR)
+                            return@addOnCompleteListener
+                        }
+
+                        val token = tokenTask.result?.token ?: return@addOnCompleteListener
+                        viewModelScope.launch {
+                            try {
+                                val response = repository.loginWithFirebase(token)
+                                if (response.success && !response.token.isNullOrBlank()) {
+                                    _loginSuccess.postValue(true)
+                                    _error.postValue(null)
+                                } else {
+                                    handleError(response.message ?: response.error ?: GENERIC_VERIFY_ERROR)
+                                }
+                            } catch (ex: Exception) {
+                                handleError(resolveError(ex))
+                            } finally {
+                                _isLoading.postValue(false)
+                            }
+                        }
+                    }
+                    ?: run {
+                        _isLoading.postValue(false)
+                        handleError(GENERIC_VERIFY_ERROR)
+                    }
+            }
     }
 }

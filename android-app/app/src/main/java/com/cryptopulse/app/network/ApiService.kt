@@ -1,5 +1,6 @@
 package com.cryptopulse.app.network
 
+import com.cryptopulse.app.network.model.FirebaseLoginRequest
 import com.cryptopulse.app.network.model.LogoutResponse
 import com.cryptopulse.app.network.model.RefreshTokenRequest
 import com.cryptopulse.app.network.model.RefreshTokenResponse
@@ -21,6 +22,11 @@ interface ApiService {
     @POST("auth/verify-otp")
     suspend fun verifyOtp(
         @Body body: VerifyOtpRequest
+    ): VerifyOtpResponse
+
+    @POST("auth/firebase-login")
+    suspend fun firebaseLogin(
+        @Body body: FirebaseLoginRequest
     ): VerifyOtpResponse
 
     @POST("auth/refresh-token")
