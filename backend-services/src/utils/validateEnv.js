@@ -23,7 +23,8 @@ const requiredEnvVars = [
   'AI_MIN_CONFIDENCE',
   'AI_TARGET_PROFITABILITY',
   'MAX_CONCURRENT_TRADES',
-  'ENCRYPTION_KEY'
+  'ENCRYPTION_KEY',
+  'FIREBASE_SERVICE_ACCOUNT'
 ];
 
 function validateEnv() {

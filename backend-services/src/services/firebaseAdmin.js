@@ -1,0 +1,59 @@
+const admin = require('firebase-admin')
+const logger = require('../utils/logger')
+
+let firebaseApp = null
+
+function parseServiceAccount() {
+  const raw = process.env.FIREBASE_SERVICE_ACCOUNT
+
+  if (!raw) {
+    throw new Error('FIREBASE_SERVICE_ACCOUNT environment variable is not set')
+  }
+
+  const tryJsonParse = (value) => {
+    try {
+      return JSON.parse(value)
+    } catch (error) {
+      return null
+    }
+  }
+
+  // Prefer base64 decoding (common for CI secrets)
+  const base64Decoded = tryJsonParse(
+    Buffer.from(raw, 'base64').toString('utf-8')
+  )
+  if (base64Decoded) {
+    return base64Decoded
+  }
+
+  const directJson = tryJsonParse(raw)
+  if (directJson) {
+    return directJson
+  }
+
+  throw new Error('FIREBASE_SERVICE_ACCOUNT is not valid JSON or base64 encoded JSON')
+}
+
+function initialiseFirebaseAdmin() {
+  if (firebaseApp) {
+    return firebaseApp
+  }
+
+  const serviceAccount = parseServiceAccount()
+
+  firebaseApp = admin.initializeApp({
+    credential: admin.credential.cert(serviceAccount)
+  })
+
+  logger.info('Firebase Admin SDK initialised')
+  return firebaseApp
+}
+
+const getFirebaseAuth = () => {
+  const app = initialiseFirebaseAdmin()
+  return admin.auth(app)
+}
+
+module.exports = { getFirebaseAuth }
+
+

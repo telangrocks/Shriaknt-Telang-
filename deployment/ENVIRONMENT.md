@@ -28,6 +28,7 @@ This document captures the runtime variables that must be present when deploying
 | `AI_TARGET_PROFITABILITY` | `85` |
 | `MAX_CONCURRENT_TRADES` | `10` |
 | `ENCRYPTION_KEY` | 64-hex-char string (32 bytes), e.g. `44033186c3c09829f79555f937bcd2e5a7892090e2c27d7c176fe5d53839f962` |
+| `FIREBASE_SERVICE_ACCOUNT` | Base64 encoded Firebase service-account JSON used by the Admin SDK |
 
 > The server refuses to start if `ENCRYPTION_KEY` is missing or not 64 hexadecimal characters (see `src/utils/validateEnv.js`).
 
@@ -36,6 +37,13 @@ This document captures the runtime variables that must be present when deploying
 | Variable | Example / Notes |
 | --- | --- |
 | `VITE_API_BASE_URL` | Base URL *without* `/api` suffix (the app appends `/api` automatically), e.g. `https://api.cryptopulse.com` |
+| `VITE_FIREBASE_API_KEY` | Firebase Web API key |
+| `VITE_FIREBASE_AUTH_DOMAIN` | Firebase auth domain (`cryptopulse-71537.firebaseapp.com`) |
+| `VITE_FIREBASE_PROJECT_ID` | `cryptopulse-71537` |
+| `VITE_FIREBASE_STORAGE_BUCKET` | `cryptopulse-71537.firebasestorage.app` |
+| `VITE_FIREBASE_MESSAGING_SENDER_ID` | `324707004601` |
+| `VITE_FIREBASE_APP_ID` | Web app id (`1:324707004601:web:...`) |
+| `VITE_FIREBASE_MEASUREMENT_ID` | Optional analytics measurement id |
 
 > When deploying through Northflank ensure the environment variable is added to the service so the build step picks it up.
 

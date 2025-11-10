@@ -1,13 +1,24 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Phone, ShieldCheck, RefreshCcw, Loader2, RotateCcw } from 'lucide-react'
 import { RecaptchaVerifier, signInWithPhoneNumber } from 'firebase/auth'
+import { api } from '../services/api'
+import { AUTH_TOKEN_KEY, REFRESH_TOKEN_KEY } from '../constants/auth'
 import { getFirebaseAuth } from '../lib/firebaseClient'
 
 const PHONE_REGEX = /^\+?[1-9]\d{6,14}$/
 const OTP_REGEX = /^\d{6}$/
 const RESEND_COOLDOWN_SECONDS = 45
 
-const resolveFirebaseError = (error) => {
+const resolveErrorMessage = (error) => {
+  if (error?.response) {
+    const { status, data } = error.response
+    const message = data?.message || data?.error
+    if (message) {
+      return message
+    }
+    return `Request failed with status ${status}`
+  }
+
   if (error?.code?.startsWith('auth/')) {
     switch (error.code) {
       case 'auth/invalid-phone-number':
@@ -24,6 +35,14 @@ const resolveFirebaseError = (error) => {
       default:
         return error.message || 'Firebase authentication error. Please try again.'
     }
+  }
+
+  if (error?.code === 'ECONNABORTED') {
+    return 'Request timed out. Please check your connection and try again.'
+  }
+
+  if (error?.code === 'ERR_NETWORK' || error?.message === 'Network Error') {
+    return 'Unable to reach Cryptopulse servers. Please verify your network or API configuration.'
   }
 
   return error?.message || 'Unexpected error occurred. Please try again.'
@@ -60,6 +79,15 @@ const Registration = ({ setIsAuthenticated }) => {
     } catch (error) {
       console.error('Failed to initialise Firebase auth:', error)
       return null
+    }
+  }, [])
+
+  const persistSession = useCallback((token, refreshToken) => {
+    if (token) {
+      localStorage.setItem(AUTH_TOKEN_KEY, token)
+    }
+    if (refreshToken) {
+      localStorage.setItem(REFRESH_TOKEN_KEY, refreshToken)
     }
   }, [])
 
@@ -152,6 +180,11 @@ const Registration = ({ setIsAuthenticated }) => {
       return
     }
 
+    if (!auth) {
+      showStatus('Firebase authentication is not configured. Please contact support.', 'error')
+      return
+    }
+
     setIsLoading(true)
     setLastAction('request')
     showStatus('Preparing secure OTP request…', 'info')
@@ -169,7 +202,7 @@ const Registration = ({ setIsAuthenticated }) => {
       console.error('Error requesting OTP from Firebase:', error)
       window.firebaseRecaptchaVerifier?.clear()
       window.firebaseRecaptchaVerifier = null
-      showStatus(resolveFirebaseError(error), 'error')
+      showStatus(resolveErrorMessage(error), 'error')
     } finally {
       setIsLoading(false)
     }
@@ -189,6 +222,11 @@ const Registration = ({ setIsAuthenticated }) => {
       return
     }
 
+    if (!auth) {
+      showStatus('Firebase authentication is not configured. Please contact support.', 'error')
+      return
+    }
+
     setIsLoading(true)
     setLastAction('verify')
     showStatus('Verifying your code…', 'info')
@@ -200,23 +238,34 @@ const Registration = ({ setIsAuthenticated }) => {
       }
 
       const result = await confirmationResult.confirm(normalizedOtp)
-      const token = await result.user.getIdToken()
-      setFirebaseToken(token)
-      localStorage.setItem('firebase_id_token', token)
-      showStatus(
-        'Phone verified with Firebase. Proceeding to next phase of the migration…',
-        'success'
-      )
-      setIsAuthenticated(true)
-      setOtp('')
-      setOtpExpirySeconds(null)
+      const idToken = await result.user.getIdToken()
+      setFirebaseToken(idToken)
+      localStorage.setItem('firebase_id_token', idToken)
+
+      const { data } = await api.post('/auth/firebase-login', { idToken })
+
+      if (data?.success && data?.token) {
+        persistSession(data.token, data?.refreshToken)
+        showStatus(
+          data?.message || 'Phone verified. Redirecting you to the dashboard…',
+          'success'
+        )
+        setIsAuthenticated(true)
+        setOtp('')
+        setOtpExpirySeconds(null)
+      } else {
+        showStatus(
+          data?.message || data?.error || 'Verification failed. Please try again.',
+          'error'
+        )
+      }
     } catch (error) {
-      console.error('Error verifying Firebase OTP:', error)
-      showStatus(resolveFirebaseError(error), 'error')
+      console.error('Error verifying Firebase OTP or exchanging token:', error)
+      showStatus(resolveErrorMessage(error), 'error')
     } finally {
       setIsLoading(false)
     }
-  }, [confirmationResult, otp, phone, setIsAuthenticated, showStatus])
+  }, [confirmationResult, otp, persistSession, setIsAuthenticated, showStatus])
 
   const handleRetry = () => {
     if (isLoading) return

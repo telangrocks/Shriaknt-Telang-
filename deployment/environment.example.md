@@ -33,6 +33,7 @@ Use these values (replace placeholders with real secrets and domains) when confi
 | `AI_TARGET_PROFITABILITY` | `85` | Strategy tuning. |
 | `MAX_CONCURRENT_TRADES` | `10` | Strategy tuning. |
 | `SUPPORTED_EXCHANGES` | `binance,bybit,okx` | Optional. |
+| `FIREBASE_SERVICE_ACCOUNT` | base64 encoded Firebase service account JSON | Required for verifying Firebase ID tokens. |
 
 > **CORS:** make sure `ALLOWED_ORIGINS` contains the exact protocol + host (and port if any) for every frontend deployment. Missing origins will cause the OTP request to fail with “Unable to reach Cryptopulse servers”.
 

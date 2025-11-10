@@ -6,6 +6,7 @@ const { setOTP, getOTP, incrementOTPAttempts, deleteOTP, setSession } = require(
 const { verifyToken } = require('../middleware/auth');
 const logger = require('../utils/logger');
 const twilio = require('twilio');
+const { getFirebaseAuth } = require('../services/firebaseAdmin');
 
 const twilioClient = twilio(
   process.env.TWILIO_ACCOUNT_SID,
@@ -30,6 +31,60 @@ async function sendOTP(phone, otp) {
     logger.error('Error sending OTP:', error);
     return false;
   }
+}
+
+async function getOrCreateUserByPhone(phone, existingPool) {
+  const pool = existingPool || createPool();
+
+  let userResult = await pool.query(
+    `SELECT id FROM users WHERE phone = $1`,
+    [phone]
+  );
+
+  let userId;
+  let isNewUser = false;
+
+  if (userResult.rows.length === 0) {
+    const trialDays = parseInt(process.env.TRIAL_DAYS, 10) || 5;
+    const trialEndDate = new Date();
+    trialEndDate.setDate(trialEndDate.getDate() + trialDays);
+
+    const newUser = await pool.query(
+      `INSERT INTO users (phone, trial_start_date, trial_end_date, subscription_status, is_verified)
+       VALUES ($1, NOW(), $2, 'trial', true)
+       RETURNING id`,
+      [phone, trialEndDate]
+    );
+
+    userId = newUser.rows[0].id;
+    isNewUser = true;
+  } else {
+    userId = userResult.rows[0].id;
+    await pool.query(
+      `UPDATE users SET is_verified = true, updated_at = NOW() WHERE id = $1`,
+      [userId]
+    );
+  }
+
+  return { userId, isNewUser };
+}
+
+async function issueAuthTokens(userId, phone) {
+  const token = jwt.sign(
+    { userId, phone },
+    process.env.JWT_SECRET,
+    { expiresIn: process.env.JWT_EXPIRES_IN || '24h' }
+  );
+
+  const refreshToken = jwt.sign(
+    { userId, phone },
+    process.env.REFRESH_TOKEN_SECRET,
+    { expiresIn: process.env.REFRESH_TOKEN_EXPIRES_IN || '7d' }
+  );
+
+  await setSession(userId, token, refreshToken);
+
+  return { token, refreshToken };
 }
 
 // Request OTP
@@ -121,67 +176,16 @@ router.post('/verify-otp', async (req, res) => {
       });
     }
 
-    // OTP verified - create or get user
     const pool = createPool();
-    let userResult = await pool.query(`
-      SELECT id, phone, subscription_status, trial_end_date, subscription_end_date
-      FROM users
-      WHERE phone = $1
-    `, [phone]);
+    const { userId, isNewUser } = await getOrCreateUserByPhone(phone, pool);
+    const { token, refreshToken } = await issueAuthTokens(userId, phone);
 
-    let userId;
-    let isNewUser = false;
-
-    if (userResult.rows.length === 0) {
-      // Create new user with trial
-      const trialDays = parseInt(process.env.TRIAL_DAYS) || 5;
-      const trialEndDate = new Date();
-      trialEndDate.setDate(trialEndDate.getDate() + trialDays);
-
-      const newUser = await pool.query(`
-        INSERT INTO users (phone, trial_start_date, trial_end_date, subscription_status, is_verified)
-        VALUES ($1, NOW(), $2, 'trial', true)
-        RETURNING id, phone, subscription_status, trial_end_date
-      `, [phone, trialEndDate]);
-
-      userId = newUser.rows[0].id;
-      isNewUser = true;
-    } else {
-      userId = userResult.rows[0].id;
-      
-      // Update verification status
-      await pool.query(`
-        UPDATE users
-        SET is_verified = true, updated_at = NOW()
-        WHERE id = $1
-      `, [userId]);
-    }
-
-    // Generate tokens
-    const token = jwt.sign(
-      { userId, phone },
-      process.env.JWT_SECRET,
-      { expiresIn: process.env.JWT_EXPIRES_IN || '24h' }
-    );
-
-    const refreshToken = jwt.sign(
-      { userId, phone },
-      process.env.REFRESH_TOKEN_SECRET,
-      { expiresIn: process.env.REFRESH_TOKEN_EXPIRES_IN || '7d' }
-    );
-
-    // Store session
-    await setSession(userId, token, refreshToken);
-
-    // Delete OTP
     await deleteOTP(phone);
 
-    // Mark OTP as verified in database
-    await pool.query(`
-      UPDATE otp_verifications
-      SET is_verified = true
-      WHERE phone = $1 AND otp_code = $2
-    `, [phone, otp]);
+    await pool.query(
+      `UPDATE otp_verifications SET is_verified = true WHERE phone = $1 AND otp_code = $2`,
+      [phone, otp]
+    );
 
     res.json({
       success: true,
@@ -199,6 +203,64 @@ router.post('/verify-otp', async (req, res) => {
     res.status(500).json({
       error: 'Internal server error',
       message: 'Failed to verify OTP'
+    });
+  }
+});
+
+// Firebase login
+router.post('/firebase-login', async (req, res) => {
+  try {
+    const { idToken } = req.body;
+
+    if (!idToken) {
+      return res.status(400).json({
+        error: 'Missing idToken',
+        message: 'Firebase ID token is required'
+      });
+    }
+
+    const firebaseAuth = getFirebaseAuth();
+    let decodedToken;
+
+    try {
+      decodedToken = await firebaseAuth.verifyIdToken(idToken, true);
+    } catch (error) {
+      logger.error('Failed to verify Firebase ID token:', error);
+      return res.status(401).json({
+        error: 'Invalid Firebase token',
+        message: 'The provided Firebase token is invalid or expired.'
+      });
+    }
+
+    const phone = decodedToken.phone_number;
+
+    if (!phone) {
+      return res.status(400).json({
+        error: 'Missing phone number',
+        message: 'Firebase token does not contain a phone number claim.'
+      });
+    }
+
+    const { userId, isNewUser } = await getOrCreateUserByPhone(phone);
+    const { token, refreshToken } = await issueAuthTokens(userId, phone);
+
+    res.json({
+      success: true,
+      message: isNewUser ? 'Account created and verified' : 'Login successful',
+      token,
+      refreshToken,
+      user: {
+        id: userId,
+        phone,
+        isNewUser,
+        firebaseUid: decodedToken.uid
+      }
+    });
+  } catch (error) {
+    logger.error('Error during Firebase login:', error);
+    res.status(500).json({
+      error: 'Internal server error',
+      message: 'Failed to authenticate with Firebase'
     });
   }
 });
