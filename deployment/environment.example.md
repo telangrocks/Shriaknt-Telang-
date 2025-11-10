@@ -45,6 +45,13 @@ When building with GitHub Actions or Northflank, supply the following build-time
 | Variable | Example | Notes |
 | --- | --- | --- |
 | `VITE_API_BASE_URL` | `https://api.cryptopulse.live` | Must match backend `API_BASE_URL` (no trailing slash). |
+| `VITE_FIREBASE_API_KEY` | `AIza...` | Firebase web API key. |
+| `VITE_FIREBASE_AUTH_DOMAIN` | `cryptopulse-71537.firebaseapp.com` | Firebase auth domain. |
+| `VITE_FIREBASE_PROJECT_ID` | `cryptopulse-71537` | Firebase project id. |
+| `VITE_FIREBASE_STORAGE_BUCKET` | `cryptopulse-71537.firebasestorage.app` | Firebase storage bucket. |
+| `VITE_FIREBASE_MESSAGING_SENDER_ID` | `324707004601` | Firebase messaging sender id. |
+| `VITE_FIREBASE_APP_ID` | `1:324707004601:web:abc123` | Firebase web app id. |
+| `VITE_FIREBASE_MEASUREMENT_ID` | `G-XXXXXXX` | Optional analytics measurement id. |
 
 Optional (only if you customise preview/serve commands):
 

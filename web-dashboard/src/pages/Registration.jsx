@@ -1,28 +1,29 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Phone, ShieldCheck, RefreshCcw, Loader2, RotateCcw } from 'lucide-react'
-import { api } from '../services/api'
-import { AUTH_TOKEN_KEY, REFRESH_TOKEN_KEY } from '../constants/auth'
+import { RecaptchaVerifier, signInWithPhoneNumber } from 'firebase/auth'
+import { getFirebaseAuth } from '../lib/firebaseClient'
 
 const PHONE_REGEX = /^\+?[1-9]\d{6,14}$/
 const OTP_REGEX = /^\d{6}$/
 const RESEND_COOLDOWN_SECONDS = 45
 
-const resolveErrorMessage = (error) => {
-  if (error?.response) {
-    const { status, data } = error.response
-    const message = data?.message || data?.error
-    if (message) {
-      return message
+const resolveFirebaseError = (error) => {
+  if (error?.code?.startsWith('auth/')) {
+    switch (error.code) {
+      case 'auth/invalid-phone-number':
+        return 'This phone number is invalid. Please include the country code.'
+      case 'auth/too-many-requests':
+        return 'Too many attempts. Please wait a few minutes and try again.'
+      case 'auth/quota-exceeded':
+        return 'OTP quota exceeded for this Firebase project. Try again later.'
+      case 'auth/invalid-verification-code':
+        return 'The verification code is incorrect. Double-check and try again.'
+      case 'auth/missing-verification-code':
+      case 'auth/code-expired':
+        return 'The verification code has expired. Request a new OTP.'
+      default:
+        return error.message || 'Firebase authentication error. Please try again.'
     }
-    return `Request failed with status ${status}`
-  }
-
-  if (error?.code === 'ECONNABORTED') {
-    return 'Request timed out. Please check your connection and try again.'
-  }
-
-  if (error?.code === 'ERR_NETWORK' || error?.message === 'Network Error') {
-    return 'Unable to reach Cryptopulse servers. Please verify your network or API configuration.'
   }
 
   return error?.message || 'Unexpected error occurred. Please try again.'
@@ -50,6 +51,17 @@ const Registration = ({ setIsAuthenticated }) => {
   const [lastAction, setLastAction] = useState(null)
   const [resendCooldown, setResendCooldown] = useState(0)
   const [otpExpirySeconds, setOtpExpirySeconds] = useState(null)
+  const [confirmationResult, setConfirmationResult] = useState(null)
+  const [, setFirebaseToken] = useState(null)
+
+  const auth = useMemo(() => {
+    try {
+      return getFirebaseAuth()
+    } catch (error) {
+      console.error('Failed to initialise Firebase auth:', error)
+      return null
+    }
+  }, [])
 
   useEffect(() => {
     if (resendCooldown <= 0) {
@@ -78,12 +90,50 @@ const Registration = ({ setIsAuthenticated }) => {
     return () => window.clearInterval(interval)
   }, [otpExpirySeconds])
 
+  useEffect(() => {
+    return () => {
+      if (typeof window !== 'undefined' && window.firebaseRecaptchaVerifier) {
+        window.firebaseRecaptchaVerifier.clear()
+        window.firebaseRecaptchaVerifier = null
+      }
+    }
+  }, [])
+
   const phoneIsValid = useMemo(() => PHONE_REGEX.test(phone.trim()), [phone])
   const otpIsValid = useMemo(() => OTP_REGEX.test(otp.trim()), [otp])
 
   const showStatus = useCallback((message, type) => {
     setStatus({ message, type })
   }, [])
+
+  const ensureRecaptcha = useCallback(async () => {
+    if (typeof window === 'undefined' || !auth) {
+      throw new Error('Firebase auth unavailable')
+    }
+
+    if (window.firebaseRecaptchaVerifier) {
+      return window.firebaseRecaptchaVerifier
+    }
+
+    const verifier = new RecaptchaVerifier(
+      'firebase-recaptcha-container',
+      {
+        size: 'invisible',
+        callback: () => {
+          // invisible reCAPTCHA solved automatically
+        },
+        'expired-callback': () => {
+          window.firebaseRecaptchaVerifier?.clear()
+          window.firebaseRecaptchaVerifier = null
+        }
+      },
+      auth
+    )
+
+    await verifier.render()
+    window.firebaseRecaptchaVerifier = verifier
+    return verifier
+  }, [auth])
 
   const persistSession = useCallback((token, refreshToken) => {
     if (token) {
@@ -104,23 +154,26 @@ const Registration = ({ setIsAuthenticated }) => {
 
     setIsLoading(true)
     setLastAction('request')
-    showStatus('Contacting Cryptopulse servers…', 'info')
+    showStatus('Preparing secure OTP request…', 'info')
 
     try {
-      const { data } = await api.post('/auth/request-otp', { phone: normalizedPhone })
-      const successMessage =
-        data?.message || 'OTP sent successfully. Please enter the 6-digit code.'
-      showStatus(successMessage, 'success')
+      const verifier = await ensureRecaptcha()
+      const confirmation = await signInWithPhoneNumber(auth, normalizedPhone, verifier)
+      setConfirmationResult(confirmation)
+      showStatus('OTP sent successfully. Please enter the 6-digit code.', 'success')
       setStep(2)
       setOtp('')
       setResendCooldown(RESEND_COOLDOWN_SECONDS)
-      setOtpExpirySeconds(data?.expiresIn ?? 300)
+      setOtpExpirySeconds(300)
     } catch (error) {
-      showStatus(resolveErrorMessage(error), 'error')
+      console.error('Error requesting OTP from Firebase:', error)
+      window.firebaseRecaptchaVerifier?.clear()
+      window.firebaseRecaptchaVerifier = null
+      showStatus(resolveFirebaseError(error), 'error')
     } finally {
       setIsLoading(false)
     }
-  }, [phone, showStatus])
+  }, [auth, ensureRecaptcha, phone, showStatus])
 
   const handleVerifyOtp = useCallback(async () => {
     const normalizedPhone = phone.trim()
@@ -141,30 +194,29 @@ const Registration = ({ setIsAuthenticated }) => {
     showStatus('Verifying your code…', 'info')
 
     try {
-      const { data } = await api.post('/auth/verify-otp', {
-        phone: normalizedPhone,
-        otp: normalizedOtp
-      })
-
-      if (data?.success && data?.token) {
-        persistSession(data.token, data?.refreshToken)
-        showStatus(
-          data?.message || 'Phone verified. Redirecting you to the dashboard…',
-          'success'
-        )
-        setIsAuthenticated(true)
-      } else {
-        showStatus(
-          data?.message || data?.error || 'Verification failed. Please try again.',
-          'error'
-        )
+      if (!confirmationResult) {
+        showStatus('Request a new OTP before verifying.', 'error')
+        return
       }
+
+      const result = await confirmationResult.confirm(normalizedOtp)
+      const token = await result.user.getIdToken()
+      setFirebaseToken(token)
+      localStorage.setItem('firebase_id_token', token)
+      showStatus(
+        'Phone verified with Firebase. Proceeding to next phase of the migration…',
+        'success'
+      )
+      setIsAuthenticated(true)
+      setOtp('')
+      setOtpExpirySeconds(null)
     } catch (error) {
-      showStatus(resolveErrorMessage(error), 'error')
+      console.error('Error verifying Firebase OTP:', error)
+      showStatus(resolveFirebaseError(error), 'error')
     } finally {
       setIsLoading(false)
     }
-  }, [otp, persistSession, phone, setIsAuthenticated, showStatus])
+  }, [confirmationResult, otp, phone, setIsAuthenticated, showStatus])
 
   const handleRetry = () => {
     if (isLoading) return
@@ -324,6 +376,7 @@ const Registration = ({ setIsAuthenticated }) => {
           )}
         </div>
       </div>
+      <div id="firebase-recaptcha-container" className="hidden" aria-hidden="true" />
     </div>
   )
 }
