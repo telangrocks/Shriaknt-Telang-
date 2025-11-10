@@ -1,7 +1,32 @@
 import axios from 'axios'
 import { AUTH_TOKEN_KEY, REFRESH_TOKEN_KEY } from '../constants/auth'
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000'
+const deriveApiBaseUrl = () => {
+  const envValue = import.meta.env.VITE_API_BASE_URL
+  if (envValue && envValue.trim().length > 0) {
+    return envValue.replace(/\/+$/, '')
+  }
+
+  if (typeof window !== 'undefined') {
+    const { origin, hostname } = window.location
+
+    if (hostname === 'localhost' || hostname === '127.0.0.1') {
+      return 'http://localhost:3000'
+    }
+
+    const dashboardMarker = '--web-dashboard--'
+    const backendMarker = '--backend-api--'
+    if (origin.includes(dashboardMarker)) {
+      return origin.replace(dashboardMarker, backendMarker)
+    }
+
+    return origin.replace(/\/+$/, '')
+  }
+
+  return 'http://localhost:3000'
+}
+
+const API_BASE_URL = deriveApiBaseUrl()
 
 export const api = axios.create({
   baseURL: `${API_BASE_URL}/api`,
