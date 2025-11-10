@@ -10,7 +10,8 @@ const USER_FOREIGN_KEY_MAPPINGS = [
   { tableName: 'user_pairs', columnName: 'user_id' },
   { tableName: 'user_strategies', columnName: 'user_id' },
   { tableName: 'trades', columnName: 'user_id' },
-  { tableName: 'payments', columnName: 'user_id' }
+  { tableName: 'payments', columnName: 'user_id' },
+  { tableName: 'device_tokens', columnName: 'user_id' }
 ];
 
 function quoteIdentifier(identifier) {
@@ -375,12 +376,24 @@ async function initializeSchema(client) {
       )
     `);
 
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS device_tokens (
+        id SERIAL PRIMARY KEY,
+        user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+        token TEXT UNIQUE NOT NULL,
+        platform VARCHAR(50) DEFAULT 'android',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
     // Run migration logic for existing databases (ensures backward compatibility)
     await ensureForeignKeyColumnIsUuid(client, 'exchange_keys', 'user_id');
     await ensureForeignKeyColumnIsUuid(client, 'user_pairs', 'user_id');
     await ensureForeignKeyColumnIsUuid(client, 'user_strategies', 'user_id');
     await ensureForeignKeyColumnIsUuid(client, 'trades', 'user_id');
     await ensureForeignKeyColumnIsUuid(client, 'payments', 'user_id');
+    await ensureForeignKeyColumnIsUuid(client, 'device_tokens', 'user_id');
 
     // Create indexes
     await client.query(`
@@ -396,6 +409,7 @@ async function initializeSchema(client) {
       CREATE INDEX IF NOT EXISTS idx_payments_user_id ON payments(user_id);
       CREATE INDEX IF NOT EXISTS idx_payments_status ON payments(status);
       CREATE INDEX IF NOT EXISTS idx_otp_phone ON otp_verifications(phone);
+      CREATE INDEX IF NOT EXISTS idx_device_tokens_user_id ON device_tokens(user_id);
     `);
 
     await insertDefaultStrategies(client);

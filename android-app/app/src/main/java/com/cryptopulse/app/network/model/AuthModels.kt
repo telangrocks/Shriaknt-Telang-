@@ -31,6 +31,17 @@ data class FirebaseLoginRequest(
     val idToken: String
 )
 
+data class RegisterDeviceTokenRequest(
+    val token: String,
+    val platform: String = "android"
+)
+
+data class GenericResponse(
+    val success: Boolean,
+    val message: String? = null,
+    val error: String? = null
+)
+
 data class VerifiedUser(
     val id: String,
     val phone: String,

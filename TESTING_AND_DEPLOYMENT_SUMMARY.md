@@ -221,7 +221,7 @@ Before going live, verify:
 **Solution**: Ensure Redis is running and REDIS_URL is correct
 
 ### Issue: OTP not sending
-**Solution**: Verify Twilio credentials and account balance
+**Solution**: Provide Firebase service account credentials and ensure Phone Auth is enabled
 
 ### Issue: Payment webhook not receiving
 **Solution**: Verify webhook URL is publicly accessible and signature matches

@@ -31,10 +31,10 @@
 **Impact:** 2 unit tests failing  
 **Solution:** Adjust test expectations or fix edge cases
 
-### 4. Twilio Configuration
-**Issue:** Tests fail because Twilio requires credentials  
-**Impact:** Integration and E2E tests failing  
-**Solution:** Add dummy Twilio credentials to `.env` for testing
+### 4. Firebase Configuration
+**Issue:** Legacy validation expected Twilio credentials. The project now uses Firebase Phone Auth.  
+**Impact:** Integration/E2E tests should target Firebase token exchange instead.  
+**Solution:** Provide `FIREBASE_SERVICE_ACCOUNT` for backend tests or mock Firebase Admin calls.
 
 ---
 
@@ -45,8 +45,8 @@
 | Dependencies | ✅ SUCCESS | 519 packages via Yarn 4.10.3 |
 | Yarn PnP | ⚠️ FIXING | Switching to node_modules mode |
 | Unit Tests | ⚠️ PARTIAL | 7 passed, 2 failed (edge cases) |
-| Integration Tests | ❌ BLOCKED | Missing Twilio env vars |
-| E2E Tests | ❌ BLOCKED | Missing Twilio env vars |
+| Integration Tests | ❌ BLOCKED | Backend offline pending Redis/Postgres connectivity |
+| E2E Tests | ❌ BLOCKED | Backend offline pending Redis/Postgres connectivity |
 | Server | ⚠️ STARTED | Process running, needs config |
 | Performance | ❌ BLOCKED | Server not responding |
 | Health Monitor | ❌ BLOCKED | Module resolution issue |

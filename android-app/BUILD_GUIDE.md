@@ -167,7 +167,7 @@ Ensure `app/proguard-rules.pro` includes:
 ### Runtime Errors
 
 1. **Network errors**: Check API endpoint configuration
-2. **OTP not received**: Verify Twilio credentials
+2. **OTP not received**: Confirm Firebase project configuration (Phone Auth enabled, SHA hashes added)
 3. **Payment fails**: Check Cashfree configuration
 
 ## Release Checklist

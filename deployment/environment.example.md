@@ -19,9 +19,6 @@ Use these values (replace placeholders with real secrets and domains) when confi
 | `JWT_SECRET` | `generate-64-chars-or-more` | At least 32 chars. |
 | `REFRESH_TOKEN_SECRET` | `generate-64-chars-or-more` | At least 32 chars. |
 | `ENCRYPTION_KEY` | `44033186c3c09829f79555f937bcd2e5a7892090e2c27d7c176fe5d53839f962` | 64 hex characters (32 bytes). |
-| `TWILIO_ACCOUNT_SID` | `ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx` | Twilio SID. |
-| `TWILIO_AUTH_TOKEN` | `38e4932dbad76bcf0a964f692faf9e2a` | Twilio auth token. |
-| `TWILIO_PHONE_NUMBER` | `+14782158775` | Sending number in E.164 format. |
 | `TRIAL_DAYS` | `5` | Number of trial days for new accounts. |
 | `MONTHLY_PRICE` | `999` | Subscription price (in smallest currency unit if needed). |
 | `CURRENCY` | `INR` | Currency code. |
@@ -33,9 +30,9 @@ Use these values (replace placeholders with real secrets and domains) when confi
 | `AI_TARGET_PROFITABILITY` | `85` | Strategy tuning. |
 | `MAX_CONCURRENT_TRADES` | `10` | Strategy tuning. |
 | `SUPPORTED_EXCHANGES` | `binance,bybit,okx` | Optional. |
-| `FIREBASE_SERVICE_ACCOUNT` | base64 encoded Firebase service account JSON | Required for verifying Firebase ID tokens. |
+| `FIREBASE_SERVICE_ACCOUNT` | base64 encoded Firebase service account JSON | Required for verifying Firebase ID tokens and FCM notifications. |
 
-> **CORS:** make sure `ALLOWED_ORIGINS` contains the exact protocol + host (and port if any) for every frontend deployment. Missing origins will cause the OTP request to fail with “Unable to reach Cryptopulse servers”.
+> **CORS:** make sure `ALLOWED_ORIGINS` contains the exact protocol + host (and port if any) for every frontend deployment. Missing origins will block Firebase token exchange with “Unable to reach Cryptopulse servers”.
 
 ---
 
@@ -87,8 +84,8 @@ Compose other SDK-related keys (`CASHFREE_APP_ID`, etc.) via Gradle buildConfig 
    - Frontend reachable via HTTPS and allowed in `ALLOWED_ORIGINS`.
 4. **Smoke Test**
    - Visit splash → registration.
-   - Request OTP (should hit `/api/auth/request-otp` and receive success toast).
-   - Verify OTP, ensure dashboard loads stats without console/network errors.
+   - Complete Firebase phone auth on web or Android.
+   - Confirm dashboards load with valid JWT session and push notifications arrive.
 
 Keep this document updated when new services or variables are introduced.
 

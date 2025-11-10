@@ -212,7 +212,7 @@ node scripts/monitor-health.js
 
 1. **Use CI/CD Pipeline:** Set up automated testing in CI/CD
 2. **Test Database:** Use separate test database
-3. **Mock Services:** Mock external services (Twilio, Cashfree) in tests
+3. **Mock Services:** Mock external services (Firebase Admin, Cashfree) in tests
 4. **Test Coverage:** Aim for > 70% code coverage
 5. **Performance Baseline:** Establish performance baselines
 

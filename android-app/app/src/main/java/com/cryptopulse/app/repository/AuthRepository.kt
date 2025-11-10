@@ -5,6 +5,7 @@ import com.cryptopulse.app.network.ApiClient
 import com.cryptopulse.app.network.model.FirebaseLoginRequest
 import com.cryptopulse.app.network.model.RefreshTokenRequest
 import com.cryptopulse.app.network.model.RefreshTokenResponse
+import com.cryptopulse.app.network.model.RegisterDeviceTokenRequest
 import com.cryptopulse.app.network.model.VerifyOtpResponse
 import com.cryptopulse.app.utils.PreferenceManager
 import kotlinx.coroutines.delay
@@ -55,6 +56,22 @@ class AuthRepository(context: Context) {
         }
 
         return response
+    }
+
+    suspend fun registerDeviceToken(token: String, platform: String = "android") {
+        val accessToken = getAccessToken()
+        if (accessToken.isBlank()) {
+            return
+        }
+
+        runCatching {
+            executeWithRetry(maxAttempts = 2) {
+                api.registerDeviceToken(
+                    authorization = "Bearer $accessToken",
+                    body = RegisterDeviceTokenRequest(token = token, platform = platform)
+                )
+            }
+        }
     }
 
     suspend fun logout(): Boolean {

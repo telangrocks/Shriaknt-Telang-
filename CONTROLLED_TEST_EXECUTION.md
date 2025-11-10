@@ -73,7 +73,7 @@ npm run test:e2e
 
 **Prerequisites:**
 - Full environment configured
-- External services mocked (Twilio, Cashfree)
+- External services mocked (Firebase Admin, Cashfree)
 
 **Expected Results:**
 - Authentication flow: Completes successfully

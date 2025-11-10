@@ -107,7 +107,7 @@ class RegistrationActivity : AppCompatActivity() {
             hideStatus()
             lastTriggeredAction = TriggeredAction.RequestOtp
             val phone = binding.etPhone.text.toString()
-            viewModel.requestOTP(this, phone)
+            viewModel.requestOTP(this@RegistrationActivity, phone)
         }
 
         binding.btnVerifyOtp.setOnClickListener {
@@ -119,7 +119,7 @@ class RegistrationActivity : AppCompatActivity() {
 
         binding.btnRetry.setOnClickListener {
             hideStatus()
-            viewModel.retryLastAction(this)
+            viewModel.retryLastAction(this@RegistrationActivity)
         }
     }
 

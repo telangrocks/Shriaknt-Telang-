@@ -100,7 +100,7 @@ Write-Host "`n✅ Environment setup complete!" -ForegroundColor Green
 Write-Host "📝 Remember to:" -ForegroundColor Yellow
 Write-Host "   1. Update DATABASE_URL with your PostgreSQL connection string"
 Write-Host "   2. Update REDIS_URL with your Redis connection string"
-Write-Host "   3. Add your Twilio credentials"
+Write-Host "   3. Add your Firebase service account (FIREBASE_SERVICE_ACCOUNT)"
 Write-Host "   4. Add your Cashfree credentials"
 Write-Host "   5. Set API_BASE_URL to your production domain"
 

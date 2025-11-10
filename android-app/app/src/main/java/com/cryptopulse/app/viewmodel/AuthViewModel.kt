@@ -11,6 +11,7 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.PhoneAuthCredential
 import com.google.firebase.auth.PhoneAuthOptions
 import com.google.firebase.auth.PhoneAuthProvider
+import com.google.firebase.messaging.FirebaseMessaging
 import com.cryptopulse.app.repository.AuthRepository
 import kotlinx.coroutines.launch
 import org.json.JSONObject
@@ -221,6 +222,12 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
                             try {
                                 val response = repository.loginWithFirebase(token)
                                 if (response.success && !response.token.isNullOrBlank()) {
+                                    FirebaseMessaging.getInstance().token
+                                        .addOnSuccessListener { firebaseToken ->
+                                            viewModelScope.launch {
+                                                repository.registerDeviceToken(firebaseToken)
+                                            }
+                                        }
                                     _loginSuccess.postValue(true)
                                     _error.postValue(null)
                                 } else {

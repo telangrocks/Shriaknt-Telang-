@@ -2,36 +2,10 @@ const express = require('express');
 const router = express.Router();
 const jwt = require('jsonwebtoken');
 const { createPool } = require('../database/pool');
-const { setOTP, getOTP, incrementOTPAttempts, deleteOTP, setSession } = require('../services/redis');
+const { setSession } = require('../services/redis');
 const { verifyToken } = require('../middleware/auth');
 const logger = require('../utils/logger');
-const twilio = require('twilio');
 const { getFirebaseAuth } = require('../services/firebaseAdmin');
-
-const twilioClient = twilio(
-  process.env.TWILIO_ACCOUNT_SID,
-  process.env.TWILIO_AUTH_TOKEN
-);
-
-// Generate OTP
-function generateOTP() {
-  return Math.floor(100000 + Math.random() * 900000).toString();
-}
-
-// Send OTP via SMS
-async function sendOTP(phone, otp) {
-  try {
-    await twilioClient.messages.create({
-      body: `Your Cryptopulse verification code is: ${otp}. Valid for 5 minutes.`,
-      from: process.env.TWILIO_PHONE_NUMBER,
-      to: phone
-    });
-    return true;
-  } catch (error) {
-    logger.error('Error sending OTP:', error);
-    return false;
-  }
-}
 
 async function getOrCreateUserByPhone(phone, existingPool) {
   const pool = existingPool || createPool();
@@ -86,126 +60,6 @@ async function issueAuthTokens(userId, phone) {
 
   return { token, refreshToken };
 }
-
-// Request OTP
-router.post('/request-otp', async (req, res) => {
-  try {
-    const { phone } = req.body;
-
-    if (!phone || !/^\+?[1-9]\d{1,14}$/.test(phone)) {
-      return res.status(400).json({
-        error: 'Invalid phone number',
-        message: 'Please provide a valid phone number'
-      });
-    }
-
-    // Generate OTP
-    const otp = generateOTP();
-    const expiresIn = 300; // 5 minutes
-
-    // Store OTP in Redis
-    await setOTP(phone, otp, expiresIn);
-
-    // Store OTP in database for audit
-    const pool = createPool();
-    await pool.query(`
-      INSERT INTO otp_verifications (phone, otp_code, expires_at)
-      VALUES ($1, $2, NOW() + INTERVAL '5 minutes')
-    `, [phone, otp]);
-
-    // Send OTP via SMS
-    const sent = await sendOTP(phone, otp);
-
-    if (!sent) {
-      return res.status(500).json({
-        error: 'Failed to send OTP',
-        message: 'Please try again later'
-      });
-    }
-
-    res.json({
-      success: true,
-      message: 'OTP sent successfully',
-      expiresIn
-    });
-  } catch (error) {
-    logger.error('Error requesting OTP:', error);
-    res.status(500).json({
-      error: 'Internal server error',
-      message: 'Failed to send OTP'
-    });
-  }
-});
-
-// Verify OTP and login
-router.post('/verify-otp', async (req, res) => {
-  try {
-    const { phone, otp } = req.body;
-
-    if (!phone || !otp) {
-      return res.status(400).json({
-        error: 'Missing required fields',
-        message: 'Phone and OTP are required'
-      });
-    }
-
-    // Get OTP from Redis
-    const otpData = await getOTP(phone);
-
-    if (!otpData) {
-      return res.status(400).json({
-        error: 'OTP not found',
-        message: 'OTP expired or invalid. Please request a new one.'
-      });
-    }
-
-    // Check attempts
-    if (otpData.attempts >= 5) {
-      return res.status(429).json({
-        error: 'Too many attempts',
-        message: 'Maximum OTP verification attempts exceeded. Please request a new OTP.'
-      });
-    }
-
-    // Verify OTP
-    if (otpData.code !== otp) {
-      await incrementOTPAttempts(phone);
-      return res.status(400).json({
-        error: 'Invalid OTP',
-        message: 'The OTP you entered is incorrect'
-      });
-    }
-
-    const pool = createPool();
-    const { userId, isNewUser } = await getOrCreateUserByPhone(phone, pool);
-    const { token, refreshToken } = await issueAuthTokens(userId, phone);
-
-    await deleteOTP(phone);
-
-    await pool.query(
-      `UPDATE otp_verifications SET is_verified = true WHERE phone = $1 AND otp_code = $2`,
-      [phone, otp]
-    );
-
-    res.json({
-      success: true,
-      message: isNewUser ? 'Account created and verified' : 'Login successful',
-      token,
-      refreshToken,
-      user: {
-        id: userId,
-        phone,
-        isNewUser
-      }
-    });
-  } catch (error) {
-    logger.error('Error verifying OTP:', error);
-    res.status(500).json({
-      error: 'Internal server error',
-      message: 'Failed to verify OTP'
-    });
-  }
-});
 
 // Firebase login
 router.post('/firebase-login', async (req, res) => {

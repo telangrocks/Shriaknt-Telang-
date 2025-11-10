@@ -94,37 +94,6 @@ async function deleteSession(userId) {
   return await deleteCache(sessionKey);
 }
 
-// OTP management
-async function setOTP(phone, otp, expiresIn = 300) {
-  const otpKey = `otp:${phone}`;
-  const otpData = {
-    code: otp,
-    attempts: 0,
-    createdAt: new Date().toISOString()
-  };
-  return await setCache(otpKey, otpData, expiresIn);
-}
-
-async function getOTP(phone) {
-  const otpKey = `otp:${phone}`;
-  return await getCache(otpKey);
-}
-
-async function incrementOTPAttempts(phone) {
-  const otp = await getOTP(phone);
-  if (otp) {
-    otp.attempts = (otp.attempts || 0) + 1;
-    await setOTP(phone, otp.code, 300);
-    return otp.attempts;
-  }
-  return 0;
-}
-
-async function deleteOTP(phone) {
-  const otpKey = `otp:${phone}`;
-  return await deleteCache(otpKey);
-}
-
 // Market data caching
 async function cacheMarketData(exchange, pair, data, ttl = 2) {
   const key = `market:${exchange}:${pair}`;
@@ -202,10 +171,6 @@ module.exports = {
   setSession,
   getSession,
   deleteSession,
-  setOTP,
-  getOTP,
-  incrementOTPAttempts,
-  deleteOTP,
   cacheMarketData,
   getCachedMarketData,
   cacheAISignal,

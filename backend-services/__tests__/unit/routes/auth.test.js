@@ -2,50 +2,14 @@ const request = require('supertest');
 const app = require('../../../src/server');
 
 describe('Auth Routes - Unit Tests', () => {
-  describe('POST /api/auth/request-otp', () => {
-    it('should return 400 for invalid phone number', async () => {
+  describe('POST /api/auth/firebase-login', () => {
+    it('should return 400 when idToken is missing', async () => {
       const response = await request(app)
-        .post('/api/auth/request-otp')
-        .send({ phone: 'invalid' });
+        .post('/api/auth/firebase-login')
+        .send({});
 
       expect(response.status).toBe(400);
       expect(response.body).toHaveProperty('error');
-    });
-
-    it('should return 400 for missing phone number', async () => {
-      const response = await request(app)
-        .post('/api/auth/request-otp')
-        .send({});
-
-      expect(response.status).toBe(400);
-    });
-
-    it('should accept valid phone number format', async () => {
-      // Mock Twilio to avoid actual SMS sending in tests
-      const response = await request(app)
-        .post('/api/auth/request-otp')
-        .send({ phone: '+1234567890' });
-
-      // Should either succeed or fail gracefully
-      expect([200, 400, 500]).toContain(response.status);
-    });
-  });
-
-  describe('POST /api/auth/verify-otp', () => {
-    it('should return 400 for missing phone or OTP', async () => {
-      const response = await request(app)
-        .post('/api/auth/verify-otp')
-        .send({});
-
-      expect(response.status).toBe(400);
-    });
-
-    it('should return 400 for invalid OTP', async () => {
-      const response = await request(app)
-        .post('/api/auth/verify-otp')
-        .send({ phone: '+1234567890', otp: '000000' });
-
-      expect(response.status).toBe(400);
     });
   });
 

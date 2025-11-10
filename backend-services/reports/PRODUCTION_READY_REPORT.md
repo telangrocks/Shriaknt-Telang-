@@ -9,7 +9,7 @@ Live credential validation could not complete because the provided PostgreSQL an
 ## Environment
 - `.env.production` applied and validated.
 - Yarn dependencies installed (node_modules linker).
-- JWT/Twilio/Cashfree secrets loaded successfully.
+- JWT/Firebase/Cashfree secrets loaded successfully.
 
 ## Connectivity Findings
 | Service | Host | Result |

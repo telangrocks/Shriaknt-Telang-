@@ -166,7 +166,7 @@ This document summarizes the **complete end-to-end trading bot system** that has
 ## 🔑 Key Features Implemented
 
 ### ✅ Authentication & Security
-- [x] OTP-based phone authentication (Twilio)
+- [x] Firebase-based phone authentication and messaging
 - [x] JWT token management
 - [x] Refresh token support
 - [x] Session management in Redis
@@ -392,7 +392,7 @@ ab -n 1000 -c 10 https://your-api/health
 **Subtotal**: ~$75/month
 
 ### Third-Party Services:
-- **Twilio**: $0.0075 per SMS (~$20-50/month)
+- **Firebase**: Phone Auth usage subject to Google Cloud pricing (most tiers free for moderate usage)
 - **Cashfree**: 2% transaction fee
 - **Domain** (optional): ~$1/month
 
@@ -541,7 +541,7 @@ ab -n 1000 -c 10 https://your-api/health
 - [Northflank Docs](https://northflank.com/docs)
 - [CCXT Library](https://docs.ccxt.com)
 - [Cashfree API](https://docs.cashfree.com)
-- [Twilio SMS API](https://www.twilio.com/docs/sms)
+- [Firebase Phone Authentication](https://firebase.google.com/docs/auth/android/phone-auth)
 - [PostgreSQL Guide](https://www.postgresql.org/docs/)
 - [Redis Documentation](https://redis.io/documentation)
 

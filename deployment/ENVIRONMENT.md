@@ -10,9 +10,6 @@ This document captures the runtime variables that must be present when deploying
 | `REDIS_URL` | `redis://redis-host:6379` |
 | `JWT_SECRET` | 32+ character secret for access tokens |
 | `REFRESH_TOKEN_SECRET` | 32+ character secret for refresh tokens |
-| `TWILIO_ACCOUNT_SID` | Twilio SID |
-| `TWILIO_AUTH_TOKEN` | Twilio auth token |
-| `TWILIO_PHONE_NUMBER` | `+1XXXXXXXXXX` |
 | `CASHFREE_APP_ID` | Cashfree app ID |
 | `CASHFREE_SECRET_KEY` | Cashfree secret |
 | `CASHFREE_WEBHOOK_SECRET` | Cashfree webhook secret |

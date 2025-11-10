@@ -97,7 +97,7 @@ echo -e "\n${GREEN}✅ Environment setup complete!${NC}"
 echo -e "${YELLOW}📝 Remember to:${NC}"
 echo -e "   1. Update DATABASE_URL with your PostgreSQL connection string"
 echo -e "   2. Update REDIS_URL with your Redis connection string"
-echo -e "   3. Add your Twilio credentials"
+echo -e "   3. Add your Firebase service account (FIREBASE_SERVICE_ACCOUNT)"
 echo -e "   4. Add your Cashfree credentials"
 echo -e "   5. Set API_BASE_URL to your production domain"
 

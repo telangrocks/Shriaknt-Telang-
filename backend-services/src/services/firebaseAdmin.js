@@ -54,6 +54,10 @@ const getFirebaseAuth = () => {
   return admin.auth(app)
 }
 
-module.exports = { getFirebaseAuth }
+const getFirebaseMessaging = () => {
+  const app = initialiseFirebaseAdmin()
+  return admin.messaging(app)
+}
 
+module.exports = { getFirebaseAuth, getFirebaseMessaging }
 

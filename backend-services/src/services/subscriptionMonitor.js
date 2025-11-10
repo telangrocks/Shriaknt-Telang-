@@ -68,7 +68,7 @@ async function sendRenewalReminders() {
       AND is_active = true
     `);
 
-    // TODO: Send SMS reminders via Twilio
+    // TODO: Send push/email reminders via Firebase Cloud Messaging or email service
     // For now, just log
     if (result.rows.length > 0) {
       logger.info(`Found ${result.rows.length} users needing renewal reminders`);

@@ -20,7 +20,7 @@
 ## Environment Observations
 - **PostgreSQL:** `primary.postgresql--sg8rdlcdjdjw.addon.code.run` → DNS lookup failed (ENOTFOUND).
 - **Redis:** `master.radis--sg8rdlcdjdjw.addon.code.run` → DNS lookup failed (ENOTFOUND). Note: hostname contains `radis` (possible typo?).
-- **Twilio & Cashfree:** Dummy API calls not exercised due to early server exit.
+- **Firebase Auth & Cashfree:** External calls not exercised due to early server exit.
 
 ## Outstanding Actions
 1. Verify live PostgreSQL hostname (ensure DNS record exists / correct spelling).

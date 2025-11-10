@@ -7,7 +7,7 @@ Complete step-by-step guide for deploying the Cryptopulse Trading Bot System.
 - Northflank account
 - PostgreSQL database (or use Northflank addon)
 - Redis instance (or use Northflank addon)
-- Twilio account with SMS enabled
+- Firebase project with Phone Auth & Cloud Messaging enabled
 - Cashfree account with production credentials
 - Domain name (optional but recommended)
 
@@ -37,9 +37,7 @@ Required variables:
 - `REDIS_URL` - Redis connection string
 - `JWT_SECRET` - 32+ character random string
 - `REFRESH_TOKEN_SECRET` - 32+ character random string
-- `TWILIO_ACCOUNT_SID` - From Twilio dashboard
-- `TWILIO_AUTH_TOKEN` - From Twilio dashboard
-- `TWILIO_PHONE_NUMBER` - Your Twilio phone number
+- `FIREBASE_SERVICE_ACCOUNT` - Base64 encoded Firebase service account JSON
 - `CASHFREE_APP_ID` - From Cashfree dashboard
 - `CASHFREE_SECRET_KEY` - From Cashfree dashboard
 - `CASHFREE_WEBHOOK_SECRET` - Webhook secret
@@ -350,12 +348,12 @@ node scripts/performance-test.js
 3. Verify webhook signature
 4. Check payment logs
 
-### OTP Not Sending
+### Firebase Auth Issues
 
-1. Verify Twilio credentials
-2. Check phone number format
-3. Verify Twilio account balance
-4. Check Twilio logs
+1. Verify Firebase service account credentials
+2. Confirm Phone Auth is enabled for the project
+3. Check Firebase Authentication logs for rate limits or errors
+4. Ensure reCAPTCHA and device verification complete successfully on clients
 
 ## Support
 

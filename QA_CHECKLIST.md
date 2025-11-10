@@ -11,7 +11,7 @@ Complete checklist for deploying the Cryptopulse Trading Bot System to productio
 - [ ] Encryption key is 64 characters (32 bytes hex)
 - [ ] Database URL configured correctly
 - [ ] Redis URL configured correctly
-- [ ] Twilio credentials added and tested
+- [ ] Firebase service account configured (backend)
 - [ ] Cashfree credentials added and tested
 - [ ] API_BASE_URL set to production domain
 - [ ] ALLOWED_ORIGINS configured for CORS
@@ -91,7 +91,7 @@ Complete checklist for deploying the Cryptopulse Trading Bot System to productio
 - [ ] Payment history retrievable
 
 ### OTP Flow
-- [ ] Twilio SMS sending works
+- [ ] Firebase Phone Auth works end-to-end
 - [ ] OTP stored in Redis
 - [ ] OTP verification works
 - [ ] OTP expires after 5 minutes
@@ -224,7 +224,7 @@ Before going live, ensure:
 1. All environment variables are set
 2. Database and Redis are accessible
 3. Payment gateway is in production mode
-4. Twilio is configured for production
+4. Firebase Authentication and Cloud Messaging are configured for production
 5. SSL certificates are valid
 6. Monitoring is active
 7. Backup strategy is in place

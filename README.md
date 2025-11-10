@@ -17,7 +17,7 @@ Complete AI-powered cryptocurrency trading bot system with Android app, web dash
 ## ✨ Features
 
 ### Backend Services
-- ✅ OTP-based phone authentication (Twilio)
+- ✅ Firebase-based phone authentication (Firebase Auth + Admin SDK)
 - ✅ AI-powered trading signal generation (85-90% target profitability)
 - ✅ Multi-exchange support (Binance, Bybit, OKX)
 - ✅ Real-time market data scanning (2-second intervals)
@@ -32,9 +32,9 @@ Complete AI-powered cryptocurrency trading bot system with Android app, web dash
 
 ### Android App
 - ✅ Splash screen
-- ✅ OTP-based authentication
+- ✅ Firebase Phone Authentication
 - ✅ Real-time trading signals dashboard
-- ✅ Push notifications with sound alerts
+- ✅ Push notifications via Firebase Cloud Messaging with sound alerts
 - ✅ Trading interface
 - ✅ Exchange API key management
 - ✅ Payment integration
@@ -126,10 +126,8 @@ REDIS_URL=redis://localhost:6379
 JWT_SECRET=your-super-secret-jwt-key
 REFRESH_TOKEN_SECRET=your-super-secret-refresh-token-key
 
-# Twilio (SMS OTP)
-TWILIO_ACCOUNT_SID=your-twilio-account-sid
-TWILIO_AUTH_TOKEN=your-twilio-auth-token
-TWILIO_PHONE_NUMBER=+1234567890
+# Firebase Admin
+FIREBASE_SERVICE_ACCOUNT=base64-encoded-service-account-json
 
 # Cashfree Payment
 CASHFREE_APP_ID=your-cashfree-app-id
@@ -172,8 +170,7 @@ docker run -p 3000:3000 --env-file .env cryptopulse-backend
 
 ### Authentication
 
-- `POST /api/auth/request-otp` - Request OTP
-- `POST /api/auth/verify-otp` - Verify OTP and login
+- `POST /api/auth/firebase-login` - Exchange Firebase ID token for Cryptopulse session
 - `POST /api/auth/refresh-token` - Refresh JWT token
 - `GET /api/auth/me` - Get current user
 - `POST /api/auth/logout` - Logout

@@ -57,18 +57,18 @@
 
 ### Integration Tests
 **Status:** ❌ **FAILED**  
-**Reason:** Twilio requires environment variables
+**Reason:** Backend could not reach Redis/PostgreSQL (DNS failures)
 
-**Error:** `username is required` (Twilio SDK requires TWILIO_ACCOUNT_SID)
+**Error:** `getaddrinfo ENOTFOUND` for Redis/PostgreSQL hosts
 
 **Fix Required:**
-- Set `TWILIO_ACCOUNT_SID` in `.env` (even dummy value for tests)
-- Set `TWILIO_AUTH_TOKEN` in `.env`
-- Or mock Twilio in tests
+- Correct service hostnames
+- Ensure infrastructure DNS resolves from runner environment
+- Re-run tests after connectivity is restored
 
 ### E2E Tests
 **Status:** ❌ **FAILED**  
-**Reason:** Same Twilio environment variable issue
+**Reason:** Backend offline (Redis/PostgreSQL DNS failures)
 
 ---
 
@@ -167,11 +167,11 @@ yarn install
 - Adjust test expectations for boundary conditions
 - Or update RSI calculation to handle edge cases
 
-### Issue 4: Twilio Configuration
-**Problem:** Tests fail because Twilio requires credentials  
+### Issue 4: Firebase Configuration
+**Problem:** Legacy automation expected Twilio credentials; project now uses Firebase Phone Auth.  
 **Solution:**
-- Add dummy Twilio credentials to `.env` for testing
-- Or mock Twilio in test files
+- Provide `FIREBASE_SERVICE_ACCOUNT` when running backend locally
+- Mock Firebase Admin SDK calls in tests if credentials are unavailable
 
 ---
 
@@ -181,8 +181,8 @@ yarn install
 |-----------|--------|---------|
 | Dependencies | ✅ SUCCESS | 519 packages installed via Yarn 4.10.3 |
 | Unit Tests | ⚠️ PARTIAL | 7 passed, 2 failed (edge cases) |
-| Integration Tests | ❌ FAILED | Missing Twilio env vars |
-| E2E Tests | ❌ FAILED | Missing Twilio env vars |
+| Integration Tests | ❌ FAILED | Redis/PostgreSQL hostnames unresolved |
+| E2E Tests | ❌ FAILED | Backend offline (Redis/PostgreSQL hostnames unresolved) |
 | Server Start | ⚠️ STARTED | Process running but not responding |
 | Performance Test | ❌ FAILED | Server not accessible |
 | Health Monitor | ❌ FAILED | Yarn PnP module resolution |
@@ -204,7 +204,7 @@ yarn install
 ```
 
 ### Priority 3: Fix Test Issues
-1. Add Twilio credentials to `.env`
+1. Supply Firebase service account (`FIREBASE_SERVICE_ACCOUNT`) or mock verification
 2. Fix RSI test edge cases
 3. Retry test suite
 

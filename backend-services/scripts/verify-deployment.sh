@@ -34,7 +34,6 @@ fi
 # Check API endpoints
 echo -e "${YELLOW}3. Testing API endpoints...${NC}"
 ENDPOINTS=(
-    "/api/auth/request-otp"
     "/api/market/signals"
     "/api/strategy"
 )
@@ -48,8 +47,17 @@ for endpoint in "${ENDPOINTS[@]}"; do
     fi
 done
 
+# Check Firebase login endpoint (should reject missing token)
+echo -e "${YELLOW}4. Validating Firebase login endpoint...${NC}"
+FIREBASE_STATUS=$(curl -s -o /dev/null -w "%{http_code}" -X POST -H "Content-Type: application/json" -d '{}' "${API_URL}/api/auth/firebase-login")
+if [ "$FIREBASE_STATUS" = "400" ] || [ "$FIREBASE_STATUS" = "401" ]; then
+    echo -e "${GREEN}✅ /api/auth/firebase-login (HTTP $FIREBASE_STATUS)${NC}"
+else
+    echo -e "${RED}❌ /api/auth/firebase-login failed (HTTP $FIREBASE_STATUS)${NC}"
+fi
+
 # Check CORS headers
-echo -e "${YELLOW}4. Checking CORS configuration...${NC}"
+echo -e "${YELLOW}5. Checking CORS configuration...${NC}"
 CORS=$(curl -s -I -H "Origin: https://example.com" "${API_URL}/health" | grep -i "access-control-allow-origin" || echo "")
 if [ -n "$CORS" ]; then
     echo -e "${GREEN}✅ CORS headers present${NC}"
@@ -58,7 +66,7 @@ else
 fi
 
 # Check security headers
-echo -e "${YELLOW}5. Checking security headers...${NC}"
+echo -e "${YELLOW}6. Checking security headers...${NC}"
 SECURITY=$(curl -s -I "${API_URL}/health" | grep -i "x-content-type-options\|x-frame-options" || echo "")
 if [ -n "$SECURITY" ]; then
     echo -e "${GREEN}✅ Security headers present${NC}"
@@ -67,7 +75,7 @@ else
 fi
 
 # Performance check
-echo -e "${YELLOW}6. Checking response time...${NC}"
+echo -e "${YELLOW}7. Checking response time...${NC}"
 RESPONSE_TIME=$(curl -s -o /dev/null -w "%{time_total}" "${API_URL}/health" | awk '{printf "%.0f", $1*1000}')
 if [ "$RESPONSE_TIME" -lt 100 ]; then
     echo -e "${GREEN}✅ Response time: ${RESPONSE_TIME}ms (< 100ms target)${NC}"

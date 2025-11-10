@@ -195,5 +195,70 @@ router.put('/strategies/:id/toggle', verifyToken, async (req, res) => {
   }
 });
 
+// Register device token
+router.post('/device-tokens', verifyToken, async (req, res) => {
+  try {
+    const { token, platform } = req.body;
+
+    if (!token) {
+      return res.status(400).json({
+        error: 'Missing required fields',
+        message: 'Device token is required'
+      });
+    }
+
+    const pool = createPool();
+    await pool.query(
+      `INSERT INTO device_tokens (user_id, token, platform, updated_at)
+       VALUES ($1, $2, COALESCE($3, 'android'), NOW())
+       ON CONFLICT (token)
+       DO UPDATE SET user_id = EXCLUDED.user_id, platform = EXCLUDED.platform, updated_at = NOW()`,
+      [req.userId, token, platform]
+    );
+
+    res.json({
+      success: true,
+      message: 'Device token registered successfully'
+    });
+  } catch (error) {
+    logger.error('Error registering device token:', error);
+    res.status(500).json({
+      error: 'Internal server error',
+      message: 'Failed to register device token'
+    });
+  }
+});
+
+// Remove device token
+router.delete('/device-tokens', verifyToken, async (req, res) => {
+  try {
+    const { token } = req.body;
+
+    if (!token) {
+      return res.status(400).json({
+        error: 'Missing required fields',
+        message: 'Device token is required'
+      });
+    }
+
+    const pool = createPool();
+    await pool.query(
+      `DELETE FROM device_tokens WHERE token = $1 AND user_id = $2`,
+      [token, req.userId]
+    );
+
+    res.json({
+      success: true,
+      message: 'Device token removed successfully'
+    });
+  } catch (error) {
+    logger.error('Error removing device token:', error);
+    res.status(500).json({
+      error: 'Internal server error',
+      message: 'Failed to remove device token'
+    });
+  }
+});
+
 module.exports = router;
 

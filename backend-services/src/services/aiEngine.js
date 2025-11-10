@@ -1,6 +1,7 @@
 const { createPool } = require('../database/pool');
 const { cacheAISignal, getCachedMarketData } = require('./redis');
 const logger = require('../utils/logger');
+const { sendTradeSignalNotification } = require('./notifications');
 
 let aiServiceInterval = null;
 
@@ -286,6 +287,9 @@ async function generateSignal(exchange, pair, marketData) {
 
     // Cache the signal
     await cacheAISignal(signal.id, signal);
+
+    // Notify subscribed users
+    await sendTradeSignalNotification(pool, signal);
 
     logger.info(`Generated ${signalType} signal for ${exchange}:${pair} with confidence ${confidenceScore}%`);
 
