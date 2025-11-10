@@ -214,7 +214,12 @@ const Registration = ({ setIsAuthenticated }) => {
 
           <form onSubmit={handleSubmit} className="space-y-6">
             <div className="space-y-4">
-              <label className="block text-sm font-medium text-slate-300">Phone Number</label>
+              <label
+                className="block text-sm font-medium text-slate-300"
+                htmlFor="phone-number"
+              >
+                Phone Number
+              </label>
               <div
                 className={`flex items-center gap-3 px-4 py-3 rounded-2xl border ${
                   phoneIsValid ? 'border-blue-500/60' : 'border-slate-700'
@@ -227,6 +232,8 @@ const Registration = ({ setIsAuthenticated }) => {
                   autoComplete="tel"
                   placeholder="+1 555 123 4567"
                   className="w-full bg-transparent outline-none text-white placeholder:text-slate-500"
+                  id="phone-number"
+                  name="phone"
                   value={phone}
                   onChange={(event) => setPhone(event.target.value)}
                 />
@@ -238,7 +245,10 @@ const Registration = ({ setIsAuthenticated }) => {
 
             {step === 2 && (
               <div className="space-y-4">
-                <label className="block text-sm font-medium text-slate-300">
+                <label
+                  className="block text-sm font-medium text-slate-300"
+                  htmlFor="otp-code"
+                >
                   One-Time Passcode
                 </label>
                 <input
@@ -248,6 +258,8 @@ const Registration = ({ setIsAuthenticated }) => {
                   maxLength={6}
                   placeholder="Enter 6-digit OTP"
                   className="w-full px-4 py-3 rounded-2xl border border-slate-700 bg-slate-900/80 text-center tracking-[0.4em] text-lg text-white outline-none focus:border-blue-500/60 focus:ring-2 focus:ring-blue-500/40"
+                  id="otp-code"
+                  name="otp"
                   value={otp}
                   onChange={(event) => setOtp(event.target.value.replace(/\D/g, ''))}
                 />
