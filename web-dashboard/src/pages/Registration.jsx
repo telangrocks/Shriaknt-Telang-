@@ -154,7 +154,7 @@ const Registration = ({ setIsAuthenticated }) => {
     return verifier
   }, [auth])
 
-  const persistSession = useCallback((token, refreshToken) => {
+  const persistAuthSession = useCallback((token, refreshToken) => {
     if (token) {
       localStorage.setItem(AUTH_TOKEN_KEY, token)
     }
@@ -236,7 +236,7 @@ const Registration = ({ setIsAuthenticated }) => {
       const { data } = await api.post('/auth/firebase-login', { idToken })
 
       if (data?.success && data?.token) {
-        persistSession(data.token, data?.refreshToken)
+        persistAuthSession(data.token, data?.refreshToken)
         showStatus(
           data?.message || 'Phone verified. Redirecting you to the dashboard…',
           'success'
@@ -256,7 +256,7 @@ const Registration = ({ setIsAuthenticated }) => {
     } finally {
       setIsLoading(false)
     }
-  }, [confirmationResult, otp, persistSession, setIsAuthenticated, showStatus])
+  }, [confirmationResult, otp, persistAuthSession, setIsAuthenticated, showStatus])
 
   const handleRetry = () => {
     if (isLoading) return
