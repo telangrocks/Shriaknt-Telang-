@@ -32,6 +32,12 @@ function validateEnv() {
       return;
     }
 
+    if (varName === 'FIREBASE_SERVICE_ACCOUNT') {
+      if (process.env.FIREBASE_SERVICE_ACCOUNT || process.env.FIREBASE_SERVICE_ACCOUNT_PATH) {
+        return;
+      }
+    }
+
     if (!process.env[varName]) {
       missing.push(varName);
     }
