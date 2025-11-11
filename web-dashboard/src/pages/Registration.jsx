@@ -134,20 +134,16 @@ const Registration = ({ setIsAuthenticated }) => {
       return window.firebaseRecaptchaVerifier
     }
 
-    const verifier = new RecaptchaVerifier(
-      'firebase-recaptcha-container',
-      {
-        size: 'invisible',
-        callback: () => {
-          // invisible reCAPTCHA solved automatically
-        },
-        'expired-callback': () => {
-          window.firebaseRecaptchaVerifier?.clear()
-          window.firebaseRecaptchaVerifier = null
-        }
+    const verifier = new RecaptchaVerifier(auth, 'firebase-recaptcha-container', {
+      size: 'invisible',
+      callback: () => {
+        // invisible reCAPTCHA solved automatically
       },
-      auth
-    )
+      'expired-callback': () => {
+        window.firebaseRecaptchaVerifier?.clear()
+        window.firebaseRecaptchaVerifier = null
+      }
+    })
 
     await verifier.render()
     window.firebaseRecaptchaVerifier = verifier
