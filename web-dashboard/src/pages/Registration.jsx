@@ -82,15 +82,6 @@ const Registration = ({ setIsAuthenticated }) => {
     }
   }, [])
 
-  const persistSession = useCallback((token, refreshToken) => {
-    if (token) {
-      localStorage.setItem(AUTH_TOKEN_KEY, token)
-    }
-    if (refreshToken) {
-      localStorage.setItem(REFRESH_TOKEN_KEY, refreshToken)
-    }
-  }, [])
-
   useEffect(() => {
     if (resendCooldown <= 0) {
       return
