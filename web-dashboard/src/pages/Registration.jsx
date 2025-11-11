@@ -182,6 +182,8 @@ const Registration = ({ setIsAuthenticated }) => {
 
     try {
       const verifier = await ensureRecaptcha()
+      console.log('debug: auth', auth)
+      console.log('debug: verifier', verifier)
       const confirmation = await signInWithPhoneNumber(auth, normalizedPhone, verifier)
       setConfirmationResult(confirmation)
       showStatus('OTP sent successfully. Please enter the 6-digit code.', 'success')
