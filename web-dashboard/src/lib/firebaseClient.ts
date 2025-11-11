@@ -12,6 +12,11 @@ const firebaseConfig = {
 }
 
 const ensureFirebaseApp = () => {
+  if (import.meta.env.PROD) {
+    // eslint-disable-next-line no-console
+    console.log('firebaseConfig(runtime)', firebaseConfig)
+  }
+
   if (!firebaseConfig.apiKey) {
     throw new Error(
       'Missing Firebase configuration. Ensure VITE_FIREBASE_* environment variables are set.'
