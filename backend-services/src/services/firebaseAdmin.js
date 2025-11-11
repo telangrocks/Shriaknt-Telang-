@@ -3,11 +3,35 @@ const logger = require('../utils/logger')
 
 let firebaseApp = null
 
+const fs = require('fs')
+const path = require('path')
+
 function parseServiceAccount() {
+  const filePath = process.env.FIREBASE_SERVICE_ACCOUNT_PATH
+  if (filePath) {
+    const resolvedPath = path.resolve(filePath)
+    const fileExists = fs.existsSync(resolvedPath)
+    if (!fileExists) {
+      throw new Error(
+        `FIREBASE_SERVICE_ACCOUNT_PATH was provided but file "${resolvedPath}" does not exist`
+      )
+    }
+    try {
+      const fileContent = fs.readFileSync(resolvedPath, 'utf8')
+      return JSON.parse(fileContent)
+    } catch (error) {
+      throw new Error(
+        `Failed to read or parse Firebase service account file at "${resolvedPath}": ${error.message}`
+      )
+    }
+  }
+
   const raw = process.env.FIREBASE_SERVICE_ACCOUNT
 
   if (!raw) {
-    throw new Error('FIREBASE_SERVICE_ACCOUNT environment variable is not set')
+    throw new Error(
+      'FIREBASE_SERVICE_ACCOUNT environment variable is not set (and no FIREBASE_SERVICE_ACCOUNT_PATH provided)'
+    )
   }
 
   const tryJsonParse = (value) => {
@@ -18,7 +42,6 @@ function parseServiceAccount() {
     }
   }
 
-  // Prefer base64 decoding (common for CI secrets)
   const base64Decoded = tryJsonParse(
     Buffer.from(raw, 'base64').toString('utf-8')
   )
@@ -31,7 +54,9 @@ function parseServiceAccount() {
     return directJson
   }
 
-  throw new Error('FIREBASE_SERVICE_ACCOUNT is not valid JSON or base64 encoded JSON')
+  throw new Error(
+    'FIREBASE_SERVICE_ACCOUNT is not valid JSON or base64 encoded JSON'
+  )
 }
 
 function initialiseFirebaseAdmin() {
