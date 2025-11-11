@@ -25,12 +25,29 @@ function calculateRSI(prices, period = 14) {
   let avgGain = gains / period;
   let avgLoss = losses / period;
 
-  if (avgLoss === 0) return 100;
+  if (avgGain === 0 && avgLoss === 0) {
+    return null;
+  }
+
+  if (avgLoss === 0) {
+    return 99.99;
+  }
+
+  if (avgGain === 0) {
+    return 0.01;
+  }
 
   const rs = avgGain / avgLoss;
   const rsi = 100 - (100 / (1 + rs));
 
-  return rsi;
+  const CLAMP_MIN = 0.01;
+  const CLAMP_MAX = 99.99;
+
+  if (!Number.isFinite(rsi)) {
+    return null;
+  }
+
+  return Math.min(CLAMP_MAX, Math.max(CLAMP_MIN, rsi));
 }
 
 // Calculate MACD
