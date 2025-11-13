@@ -42,19 +42,81 @@ function validateEnv() {
     // Log specifically about SUPABASE_JWT_SECRET for debugging
     if (!process.env.SUPABASE_JWT_SECRET) {
       logger.warn('SUPABASE_JWT_SECRET is not set. Checking for common alternative names...');
-      // Check for common alternative names
-      const alternatives = ['SUPABASE_JWT', 'JWT_SECRET_SUPABASE', 'SUPABASE_SECRET'];
-      const found = alternatives.find(alt => process.env[alt]);
-      if (found) {
-        logger.error(`Found alternative name '${found}' but expected 'SUPABASE_JWT_SECRET'. Please update your configuration.`);
-      }
       
       // Check all env vars that contain 'SUPABASE' or 'JWT'
       const relatedVars = Object.keys(process.env).filter(key => 
         key.toUpperCase().includes('SUPABASE') || key.toUpperCase().includes('JWT')
       );
+      
       if (relatedVars.length > 0) {
-        logger.info(`Related environment variables found: ${relatedVars.join(', ')}`);
+        // Log each related variable separately for clarity
+        logger.info(`Found ${relatedVars.length} related environment variable(s):`);
+        relatedVars.forEach(varName => {
+          const value = process.env[varName];
+          const hasValue = value && value.length > 0;
+          const preview = hasValue && value.length > 10 
+            ? `(value length: ${value.length})`
+            : '(empty or undefined)';
+          logger.info(`  - ${varName}: ${preview}`);
+        });
+        
+        // Check for close matches to SUPABASE_JWT_SECRET
+        const targetVar = 'SUPABASE_JWT_SECRET';
+        const closeMatches = relatedVars.filter(varName => {
+          const upperVar = varName.toUpperCase().trim();
+          const upperTarget = targetVar.toUpperCase();
+          // Check if variable starts with SUPABASE_JWT_SECRE (might be missing T)
+          // or is very close (missing/extra one character)
+          return upperVar.startsWith('SUPABASE_JWT_SECRE') || 
+                 (upperVar.length >= targetVar.length - 2 && 
+                  upperVar.length <= targetVar.length + 2 &&
+                  upperVar.includes('SUPABASE') && 
+                  upperVar.includes('JWT') && 
+                  upperVar.includes('SECRET'));
+        });
+        
+        if (closeMatches.length > 0) {
+          logger.error(`⚠️  CRITICAL: Found variable(s) with similar names to 'SUPABASE_JWT_SECRET':`);
+          closeMatches.forEach(varName => {
+            const exactMatch = varName.toUpperCase().trim() === targetVar.toUpperCase();
+            if (!exactMatch) {
+              logger.error(`   ❌ Found: '${varName}' (length: ${varName.length})`);
+              logger.error(`   ✅ Expected: 'SUPABASE_JWT_SECRET' (length: ${targetVar.length})`);
+              logger.error(`   🔧 Action Required: Rename '${varName}' to exactly 'SUPABASE_JWT_SECRET' in Northflank`);
+              logger.error(`   📍 Location: Northflank → Your Service → Settings → Environment Variables`);
+              
+              // Check for common issues
+              if (varName.length < targetVar.length) {
+                logger.error(`   ⚠️  Issue: Variable name appears to be shorter (missing characters?)`);
+              } else if (varName.length > targetVar.length) {
+                logger.error(`   ⚠️  Issue: Variable name appears to be longer (extra characters?)`);
+              }
+              if (varName !== varName.trim()) {
+                logger.error(`   ⚠️  Issue: Variable name has leading/trailing whitespace`);
+              }
+            }
+          });
+        }
+        
+        // Also check if there's a variable that starts with SUPABASE_JWT_SECRET but has extra characters
+        const prefixMatches = relatedVars.filter(varName => {
+          const upperVar = varName.toUpperCase().trim();
+          return upperVar.startsWith('SUPABASE_JWT_SECRET') && upperVar !== 'SUPABASE_JWT_SECRET';
+        });
+        
+        if (prefixMatches.length > 0) {
+          logger.error(`⚠️  Found variables starting with 'SUPABASE_JWT_SECRET' but with extra characters:`);
+          prefixMatches.forEach(varName => {
+            logger.error(`   - '${varName}' - Remove extra characters, use exactly 'SUPABASE_JWT_SECRET'`);
+          });
+        }
+      }
+      
+      // Check for common alternative names
+      const alternatives = ['SUPABASE_JWT', 'JWT_SECRET_SUPABASE', 'SUPABASE_SECRET'];
+      const found = alternatives.find(alt => process.env[alt]);
+      if (found) {
+        logger.error(`Found alternative name '${found}' but expected 'SUPABASE_JWT_SECRET'. Please update your configuration.`);
       }
     }
   }
