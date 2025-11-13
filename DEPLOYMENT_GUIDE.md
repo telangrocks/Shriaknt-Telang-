@@ -122,10 +122,30 @@ Verify:
 
 ### 3.5 Configure Environment Variables
 
-Add all variables from your `.env` file:
+**CRITICAL: Supabase JWT Secret Setup**
+
+Before adding environment variables, you **must** get your `SUPABASE_JWT_SECRET`:
+
+1. Go to your Supabase Dashboard: https://app.supabase.com
+2. Select your project
+3. Navigate to **Settings** → **API**
+4. Scroll to **JWT Settings** section
+5. Find **JWT Secret** (also called "JWT Signing Secret")
+6. Click **Reveal** to show the secret
+7. Copy the entire secret value
+
+**Add all variables to Northflank:**
 - Use Northflank's environment variable interface
 - For addon URLs, use: `${postgresql.DATABASE_URL}` and `${redis.REDIS_URL}`
 - Mark sensitive variables as "Secret"
+- **IMPORTANT**: Add `SUPABASE_JWT_SECRET` with the value from step 7 above
+
+**Required Supabase Variables:**
+- `SUPABASE_URL` - Your Supabase project URL (from Settings → API)
+- `SUPABASE_ANON_KEY` - Your Supabase anonymous key (from Settings → API)
+- `SUPABASE_JWT_SECRET` - **REQUIRED!** JWT Secret from Settings → API → JWT Settings
+
+See `DEPLOYMENT_SETUP.md` for detailed step-by-step instructions.
 
 ### 3.6 Configure Scaling
 
