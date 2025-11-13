@@ -1,5 +1,6 @@
 const crypto = require('crypto');
 const logger = require('./logger');
+const { getSupabaseJwtSecret } = require('./getSupabaseJwtSecret');
 
 const requiredEnvVars = [
   'DATABASE_URL',
@@ -21,7 +22,7 @@ const requiredEnvVars = [
   'AI_TARGET_PROFITABILITY',
   'MAX_CONCURRENT_TRADES',
   'ENCRYPTION_KEY',
-  'SUPABASE_JWT_SECRET'
+  // Note: SUPABASE_JWT_SECRET is validated separately to support alternative names
 ];
 
 function validateEnv() {
@@ -32,15 +33,30 @@ function validateEnv() {
   const isProduction = process.env.NODE_ENV === 'production';
   
   if (isProduction) {
+    // Check for SUPABASE_JWT_SECRET using helper (supports alternative names)
+    const supabaseJwtSecret = getSupabaseJwtSecret();
+    
     // In production, log which required vars are available (without values)
     const availableVars = requiredEnvVars.filter(varName => {
       const value = process.env[varName];
       return value !== undefined && value !== null && value !== '';
     });
-    logger.info(`Environment validation: ${availableVars.length}/${requiredEnvVars.length} required variables are set`);
     
-    // Log specifically about SUPABASE_JWT_SECRET for debugging
-    if (!process.env.SUPABASE_JWT_SECRET) {
+    // Add SUPABASE_JWT_SECRET to count if found (via any accepted name)
+    const totalVars = requiredEnvVars.length + 1; // +1 for SUPABASE_JWT_SECRET
+    const availableCount = availableVars.length + (supabaseJwtSecret ? 1 : 0);
+    logger.info(`Environment validation: ${availableCount}/${totalVars} required variables are set`);
+    
+    // Log which variable name was used for SUPABASE_JWT_SECRET
+    if (supabaseJwtSecret) {
+      const usedName = ['SUPABASE_JWT_SECRET', 'SUPABASE_JWT_SECRE', 'SUPABASE_JWT', 'JWT_SECRET_SUPABASE', 'SUPABASE_SECRET']
+        .find(name => process.env[name] && process.env[name].trim().length > 0);
+      if (usedName && usedName !== 'SUPABASE_JWT_SECRET') {
+        logger.info(`Using '${usedName}' for Supabase JWT Secret (working correctly, but consider renaming to 'SUPABASE_JWT_SECRET' for consistency)`);
+      } else if (usedName === 'SUPABASE_JWT_SECRET') {
+        logger.info(`Using 'SUPABASE_JWT_SECRET' for Supabase JWT Secret (correct configuration)`);
+      }
+    } else {
       logger.warn('SUPABASE_JWT_SECRET is not set. Checking for common alternative names...');
       
       // Check all env vars that contain 'SUPABASE' or 'JWT'
@@ -49,8 +65,7 @@ function validateEnv() {
       );
       
       if (relatedVars.length > 0) {
-        // Log each related variable separately for clarity
-        logger.info(`Found ${relatedVars.length} related environment variable(s):`);
+        logger.info(`Found ${relatedVars.length} related environment variable(s), but none contain a valid Supabase JWT Secret:`);
         relatedVars.forEach(varName => {
           const value = process.env[varName];
           const hasValue = value && value.length > 0;
@@ -59,68 +74,11 @@ function validateEnv() {
             : '(empty or undefined)';
           logger.info(`  - ${varName}: ${preview}`);
         });
-        
-        // Check for close matches to SUPABASE_JWT_SECRET
-        const targetVar = 'SUPABASE_JWT_SECRET';
-        const closeMatches = relatedVars.filter(varName => {
-          const upperVar = varName.toUpperCase().trim();
-          const upperTarget = targetVar.toUpperCase();
-          // Check if variable starts with SUPABASE_JWT_SECRE (might be missing T)
-          // or is very close (missing/extra one character)
-          return upperVar.startsWith('SUPABASE_JWT_SECRE') || 
-                 (upperVar.length >= targetVar.length - 2 && 
-                  upperVar.length <= targetVar.length + 2 &&
-                  upperVar.includes('SUPABASE') && 
-                  upperVar.includes('JWT') && 
-                  upperVar.includes('SECRET'));
-        });
-        
-        if (closeMatches.length > 0) {
-          logger.error(`⚠️  CRITICAL: Found variable(s) with similar names to 'SUPABASE_JWT_SECRET':`);
-          closeMatches.forEach(varName => {
-            const exactMatch = varName.toUpperCase().trim() === targetVar.toUpperCase();
-            if (!exactMatch) {
-              logger.error(`   ❌ Found: '${varName}' (length: ${varName.length})`);
-              logger.error(`   ✅ Expected: 'SUPABASE_JWT_SECRET' (length: ${targetVar.length})`);
-              logger.error(`   🔧 Action Required: Rename '${varName}' to exactly 'SUPABASE_JWT_SECRET' in Northflank`);
-              logger.error(`   📍 Location: Northflank → Your Service → Settings → Environment Variables`);
-              
-              // Check for common issues
-              if (varName.length < targetVar.length) {
-                logger.error(`   ⚠️  Issue: Variable name appears to be shorter (missing characters?)`);
-              } else if (varName.length > targetVar.length) {
-                logger.error(`   ⚠️  Issue: Variable name appears to be longer (extra characters?)`);
-              }
-              if (varName !== varName.trim()) {
-                logger.error(`   ⚠️  Issue: Variable name has leading/trailing whitespace`);
-              }
-            }
-          });
-        }
-        
-        // Also check if there's a variable that starts with SUPABASE_JWT_SECRET but has extra characters
-        const prefixMatches = relatedVars.filter(varName => {
-          const upperVar = varName.toUpperCase().trim();
-          return upperVar.startsWith('SUPABASE_JWT_SECRET') && upperVar !== 'SUPABASE_JWT_SECRET';
-        });
-        
-        if (prefixMatches.length > 0) {
-          logger.error(`⚠️  Found variables starting with 'SUPABASE_JWT_SECRET' but with extra characters:`);
-          prefixMatches.forEach(varName => {
-            logger.error(`   - '${varName}' - Remove extra characters, use exactly 'SUPABASE_JWT_SECRET'`);
-          });
-        }
-      }
-      
-      // Check for common alternative names
-      const alternatives = ['SUPABASE_JWT', 'JWT_SECRET_SUPABASE', 'SUPABASE_SECRET'];
-      const found = alternatives.find(alt => process.env[alt]);
-      if (found) {
-        logger.error(`Found alternative name '${found}' but expected 'SUPABASE_JWT_SECRET'. Please update your configuration.`);
       }
     }
   }
   
+  // Validate standard required variables
   requiredEnvVars.forEach(varName => {
     if (varName === 'ENCRYPTION_KEY') {
       return;
@@ -134,6 +92,12 @@ function validateEnv() {
     }
   });
 
+  // Validate SUPABASE_JWT_SECRET (supports alternative names)
+  const supabaseJwtSecret = getSupabaseJwtSecret();
+  if (!supabaseJwtSecret) {
+    missing.push('SUPABASE_JWT_SECRET');
+  }
+
   if (missing.length > 0 || empty.length > 0) {
     const issues = [];
     if (missing.length > 0) {
@@ -146,17 +110,33 @@ function validateEnv() {
     logger.error(`Environment validation failed. ${issues.join('; ')}`);
     
     // Provide helpful guidance for SUPABASE_JWT_SECRET
-    if (missing.includes('SUPABASE_JWT_SECRET') || empty.includes('SUPABASE_JWT_SECRET')) {
+    if (missing.includes('SUPABASE_JWT_SECRET')) {
       logger.error('SUPABASE_JWT_SECRET is required for Supabase authentication.');
+      logger.error('Accepted variable names:');
+      logger.error('  - SUPABASE_JWT_SECRET (preferred)');
+      logger.error('  - SUPABASE_JWT_SECRE (alternative)');
+      logger.error('  - SUPABASE_JWT (alternative)');
+      logger.error('  - JWT_SECRET_SUPABASE (alternative)');
+      logger.error('  - SUPABASE_SECRET (alternative)');
+      logger.error('');
       logger.error('To get this value:');
       logger.error('1. Go to your Supabase project dashboard');
       logger.error('2. Navigate to Settings > API');
       logger.error('3. Copy the JWT Secret value');
-      logger.error('4. Set it as an environment variable named exactly: SUPABASE_JWT_SECRET');
-      logger.error('5. In Northflank: Ensure the secret is named exactly "SUPABASE_JWT_SECRET" (case-sensitive)');
+      logger.error('4. Set it as an environment variable with one of the names above');
+      logger.error('5. In Northflank: Add the secret as an environment variable');
     }
     
     throw new Error(`Missing required environment variables: ${missing.concat(empty).join(', ')}`);
+  } else {
+    // Log which variable name was used (if not the preferred one)
+    if (!process.env.SUPABASE_JWT_SECRET && supabaseJwtSecret) {
+      const usedName = ['SUPABASE_JWT_SECRET', 'SUPABASE_JWT_SECRE', 'SUPABASE_JWT', 'JWT_SECRET_SUPABASE', 'SUPABASE_SECRET']
+        .find(name => process.env[name] && process.env[name].trim().length > 0);
+      if (usedName) {
+        logger.info(`Using '${usedName}' for Supabase JWT Secret (consider renaming to 'SUPABASE_JWT_SECRET' for consistency)`);
+      }
+    }
   }
 
   // Validate JWT secrets length

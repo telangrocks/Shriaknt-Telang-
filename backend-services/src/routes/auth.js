@@ -5,11 +5,14 @@ const { createPool } = require('../database/pool')
 const { setSession } = require('../services/redis')
 const { verifyToken } = require('../middleware/auth')
 const logger = require('../utils/logger')
+const { getSupabaseJwtSecret } = require('../utils/getSupabaseJwtSecret')
 
-const SUPABASE_JWT_SECRET = process.env.SUPABASE_JWT_SECRET
+// Get Supabase JWT Secret (supports both SUPABASE_JWT_SECRET and SUPABASE_JWT_SECRE)
+const SUPABASE_JWT_SECRET = getSupabaseJwtSecret()
 
 if (!SUPABASE_JWT_SECRET) {
   logger.warn('SUPABASE_JWT_SECRET is not set. Authentication will fail until this is configured.')
+  logger.warn('Checked for: SUPABASE_JWT_SECRET, SUPABASE_JWT_SECRE, SUPABASE_JWT, JWT_SECRET_SUPABASE, SUPABASE_SECRET')
 }
 
 async function getOrCreateUserByEmail(email, supabaseUserId, existingPool) {
