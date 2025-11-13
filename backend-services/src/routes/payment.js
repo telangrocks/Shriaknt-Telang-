@@ -65,7 +65,7 @@ router.post('/create-order', verifyToken, async (req, res) => {
         order_note: 'Cryptopulse Monthly Subscription',
         customer_details: {
           customer_id: req.userId.toString(),
-          customer_phone: req.userPhone
+          customer_email: req.userEmail
         },
         order_meta: {
           return_url: `${process.env.API_BASE_URL}/api/payment/callback?order_id=${orderId}`,

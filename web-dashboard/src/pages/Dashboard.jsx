@@ -1,5 +1,13 @@
-import { useState, useEffect } from 'react'
-import { BarChart3, TrendingUp, Users, DollarSign, Signal, Activity } from 'lucide-react'
+import { useState, useEffect, useMemo } from 'react'
+import {
+  BarChart3,
+  TrendingUp,
+  Users,
+  DollarSign,
+  Signal,
+  Activity,
+  LogOut
+} from 'lucide-react'
 import OverviewTab from '../components/OverviewTab'
 import SignalsTab from '../components/SignalsTab'
 import TradesTab from '../components/TradesTab'
@@ -19,7 +27,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
 
   useEffect(() => {
     fetchStats()
-    const interval = setInterval(fetchStats, 5000) // Update every 5 seconds
+    const interval = setInterval(fetchStats, 5000)
     return () => clearInterval(interval)
   }, [])
 
@@ -38,111 +46,121 @@ const Dashboard = ({ setIsAuthenticated }) => {
     setIsAuthenticated(false)
   }
 
-  const tabs = [
-    { id: 'overview', label: 'Overview', icon: Activity },
-    { id: 'signals', label: 'Signals', icon: Signal },
-    { id: 'trades', label: 'Trades', icon: TrendingUp },
-    { id: 'analytics', label: 'Analytics', icon: BarChart3 },
-    { id: 'users', label: 'Users', icon: Users }
+  const tabs = useMemo(
+    () => [
+      { id: 'overview', label: 'Overview', icon: Activity },
+      { id: 'signals', label: 'Signals', icon: Signal },
+      { id: 'trades', label: 'Trades', icon: TrendingUp },
+      { id: 'analytics', label: 'Analytics', icon: BarChart3 },
+      { id: 'users', label: 'Users', icon: Users }
+    ],
+    []
+  )
+
+  const statCards = [
+    {
+      id: 'total-users',
+      label: 'Total Users',
+      value: stats.users.total_users,
+      icon: Users,
+      accent: 'text-accent-200 bg-accent-500/10'
+    },
+    {
+      id: 'active-subscriptions',
+      label: 'Active Subscriptions',
+      value: stats.users.active_subscriptions,
+      icon: TrendingUp,
+      accent: 'text-success bg-success/10'
+    },
+    {
+      id: 'total-revenue',
+      label: 'Total Revenue',
+      value: `₹${stats.payments.total_revenue.toLocaleString()}`,
+      icon: DollarSign,
+      accent: 'text-warning bg-warning/10'
+    },
+    {
+      id: 'active-signals',
+      label: 'Active Signals',
+      value: stats.signals.active_signals,
+      icon: Signal,
+      accent: 'text-accent-300 bg-accent-500/10'
+    }
   ]
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white">
-      {/* Header */}
-      <header className="bg-gray-800 border-b border-gray-700">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
-            <div className="flex items-center">
-              <DollarSign className="h-8 w-8 text-blue-500 mr-2" />
-              <h1 className="text-2xl font-bold">Cryptopulse Dashboard</h1>
-            </div>
-            <button
-              onClick={handleLogout}
-              className="px-4 py-2 bg-red-600 hover:bg-red-700 rounded-lg transition"
-            >
-              Logout
-            </button>
+    <div className="min-h-screen px-4 sm:px-6 lg:px-10 py-10 space-y-10">
+      <header className="app-card p-8 flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
+        <div className="space-y-4">
+          <span className="app-pill">Cryptopulse Command</span>
+          <div>
+            <h1 className="heading-xl">Operations Control Center</h1>
+            <p className="text-muted text-base mt-2 max-w-2xl">
+              Monitor AI-driven trading intelligence, session security, and subscription health from
+              one mission-grade dashboard.
+            </p>
           </div>
         </div>
+        <button
+          type="button"
+          onClick={handleLogout}
+          className="inline-flex items-center gap-2 rounded-full border border-danger/40 bg-danger/10 px-5 py-3 text-sm font-medium text-danger hover:bg-danger/20 transition"
+        >
+          <LogOut className="h-4 w-4" />
+          Logout
+        </button>
       </header>
 
-      {/* Stats Cards */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
-          <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-gray-400 text-sm">Total Users</p>
-                <p className="text-3xl font-bold mt-2">{stats.users.total_users}</p>
+      <section className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-4">
+        {statCards.map((card) => {
+          const Icon = card.icon
+          return (
+            <div key={card.id} className="app-card-soft p-6 space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs uppercase tracking-[0.4em] text-muted">{card.label}</p>
+                  <p className="text-3xl font-semibold text-accent-100 mt-3">{card.value}</p>
+                </div>
+                <div className={`flex h-12 w-12 items-center justify-center rounded-2xl ${card.accent}`}>
+                  <Icon className="h-6 w-6" />
+                </div>
               </div>
-              <Users className="h-10 w-10 text-blue-500" />
             </div>
-          </div>
+          )
+        })}
+      </section>
 
-          <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-gray-400 text-sm">Active Subscriptions</p>
-                <p className="text-3xl font-bold mt-2">{stats.users.active_subscriptions}</p>
-              </div>
-              <TrendingUp className="h-10 w-10 text-green-500" />
-            </div>
-          </div>
+      <section className="app-card p-8 space-y-8">
+        <nav className="flex flex-wrap gap-3" aria-label="Dashboard tabs">
+          {tabs.map((tab) => {
+            const Icon = tab.icon
+            const isActive = activeTab === tab.id
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setActiveTab(tab.id)}
+                className={`inline-flex items-center gap-2 rounded-full px-5 py-2 text-sm font-medium transition ${
+                  isActive
+                    ? 'bg-accent-500 text-white shadow-glow'
+                    : 'border border-white/10 bg-transparent text-muted hover:border-accent-400/40 hover:text-accent-200'
+                }`}
+              >
+                <Icon className="h-4 w-4" />
+                {tab.label}
+              </button>
+            )
+          })}
+        </nav>
 
-          <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-gray-400 text-sm">Total Revenue</p>
-                <p className="text-3xl font-bold mt-2">₹{stats.payments.total_revenue.toLocaleString()}</p>
-              </div>
-              <DollarSign className="h-10 w-10 text-yellow-500" />
-            </div>
-          </div>
-
-          <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-gray-400 text-sm">Active Signals</p>
-                <p className="text-3xl font-bold mt-2">{stats.signals.active_signals}</p>
-              </div>
-              <Signal className="h-10 w-10 text-purple-500" />
-            </div>
-          </div>
+        <div className="app-card-soft p-6 border border-white/8">
+          {activeTab === 'overview' && <OverviewTab stats={stats} />}
+          {activeTab === 'signals' && <SignalsTab />}
+          {activeTab === 'trades' && <TradesTab />}
+          {activeTab === 'analytics' && <AnalyticsTab />}
+          {activeTab === 'users' && <UsersTab />}
         </div>
-
-        {/* Tabs */}
-        <div className="bg-gray-800 rounded-lg border border-gray-700">
-          <div className="border-b border-gray-700">
-            <nav className="flex space-x-8 px-6" aria-label="Tabs">
-              {tabs.map((tab) => {
-                const Icon = tab.icon
-                return (
-                  <button
-                    key={tab.id}
-                    onClick={() => setActiveTab(tab.id)}
-                    className={`${
-                      activeTab === tab.id
-                        ? 'border-blue-500 text-blue-500'
-                        : 'border-transparent text-gray-400 hover:text-gray-300 hover:border-gray-300'
-                    } flex items-center py-4 px-1 border-b-2 font-medium text-sm transition`}
-                  >
-                    <Icon className="h-5 w-5 mr-2" />
-                    {tab.label}
-                  </button>
-                )
-              })}
-            </nav>
-          </div>
-
-          <div className="p-6">
-            {activeTab === 'overview' && <OverviewTab stats={stats} />}
-            {activeTab === 'signals' && <SignalsTab />}
-            {activeTab === 'trades' && <TradesTab />}
-            {activeTab === 'analytics' && <AnalyticsTab />}
-            {activeTab === 'users' && <UsersTab />}
-          </div>
-        </div>
-      </div>
+      </section>
     </div>
   )
 }

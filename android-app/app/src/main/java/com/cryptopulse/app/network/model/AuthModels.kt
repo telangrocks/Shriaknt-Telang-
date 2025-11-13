@@ -2,51 +2,62 @@ package com.cryptopulse.app.network.model
 
 import com.google.gson.annotations.SerializedName
 
-data class RequestOtpRequest(
-    val phone: String
+data class SupabaseSignUpRequest(
+    val email: String,
+    val password: String
 )
 
-data class RequestOtpResponse(
-    val success: Boolean,
-    val message: String? = null,
-    val expiresIn: Int? = null,
-    val error: String? = null
+data class SupabaseTokenRequest(
+    val email: String,
+    val password: String
 )
 
-data class VerifyOtpRequest(
-    val phone: String,
-    val otp: String
+data class SupabaseTokenResponse(
+    @SerializedName("access_token")
+    val accessToken: String?,
+    @SerializedName("refresh_token")
+    val refreshToken: String?,
+    @SerializedName("expires_in")
+    val expiresIn: Int?,
+    @SerializedName("token_type")
+    val tokenType: String?,
+    val user: SupabaseUser?
 )
 
-data class VerifyOtpResponse(
+data class SupabaseUser(
+    val id: String,
+    val email: String?
+)
+
+data class SupabaseErrorResponse(
+    val error: String?,
+    val error_description: String?
+)
+
+data class SupabaseLoginRequest(
+    val accessToken: String
+)
+
+data class SessionExchangeResponse(
     val success: Boolean,
     val message: String? = null,
     val token: String? = null,
     val refreshToken: String? = null,
-    val user: VerifiedUser? = null,
+    val user: AuthenticatedUser? = null,
     val error: String? = null
 )
 
-data class FirebaseLoginRequest(
-    val idToken: String
-)
-
-data class RegisterDeviceTokenRequest(
-    val token: String,
-    val platform: String = "android"
+data class AuthenticatedUser(
+    val id: String,
+    val email: String?,
+    @SerializedName("isNewUser")
+    val isNewUser: Boolean
 )
 
 data class GenericResponse(
     val success: Boolean,
     val message: String? = null,
     val error: String? = null
-)
-
-data class VerifiedUser(
-    val id: String,
-    val phone: String,
-    @SerializedName("isNewUser")
-    val isNewUser: Boolean
 )
 
 data class RefreshTokenRequest(

@@ -33,29 +33,40 @@ const AnalyticsTab = () => {
     }
   }
 
-  const COLORS = ['#3B82F6', '#10B981', '#F59E0B']
+  const COLORS = ['#5382FF', '#34D399', '#FBBF24']
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Win/Loss Chart */}
-        <div className="bg-gray-700 rounded-lg p-4">
-          <h3 className="text-lg font-semibold mb-4">Win/Loss Ratio</h3>
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <div className="app-card-soft p-6 space-y-4">
+          <div className="flex items-center justify-between">
+            <h3 className="heading-lg text-lg">Win/Loss Ratio</h3>
+            <span className="text-xs uppercase tracking-[0.4em] text-muted">Last 7 days</span>
+          </div>
           <ResponsiveContainer width="100%" height={300}>
             <BarChart data={tradeData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-              <XAxis dataKey="day" stroke="#9CA3AF" />
-              <YAxis stroke="#9CA3AF" />
-              <Tooltip contentStyle={{ backgroundColor: '#1F2937', border: '1px solid #374151' }} />
-              <Bar dataKey="wins" stackId="a" fill="#10B981" />
-              <Bar dataKey="losses" stackId="a" fill="#EF4444" />
+              <CartesianGrid strokeDasharray="4 8" stroke="rgba(255,255,255,0.08)" />
+              <XAxis dataKey="day" stroke="#7C8DB5" tickLine={false} />
+              <YAxis stroke="#7C8DB5" tickLine={false} />
+              <Tooltip
+                contentStyle={{
+                  background: '#101A31',
+                  border: '1px solid rgba(83,130,255,0.35)',
+                  borderRadius: '16px',
+                  color: '#E5ECFF'
+                }}
+              />
+              <Bar dataKey="wins" stackId="a" fill="#34D399" radius={[12, 12, 0, 0]} />
+              <Bar dataKey="losses" stackId="a" fill="#F87171" radius={[0, 0, 12, 12]} />
             </BarChart>
           </ResponsiveContainer>
         </div>
 
-        {/* Exchange Volume Distribution */}
-        <div className="bg-gray-700 rounded-lg p-4">
-          <h3 className="text-lg font-semibold mb-4">Exchange Volume Distribution</h3>
+        <div className="app-card-soft p-6 space-y-4">
+          <div className="flex items-center justify-between">
+            <h3 className="heading-lg text-lg">Exchange Volume Distribution</h3>
+            <span className="text-xs uppercase tracking-[0.4em] text-muted">Live split</span>
+          </div>
           <ResponsiveContainer width="100%" height={300}>
             <PieChart>
               <Pie
@@ -72,7 +83,14 @@ const AnalyticsTab = () => {
                   <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                 ))}
               </Pie>
-              <Tooltip contentStyle={{ backgroundColor: '#1F2937', border: '1px solid #374151' }} />
+              <Tooltip
+                contentStyle={{
+                  background: '#101A31',
+                  border: '1px solid rgba(83,130,255,0.35)',
+                  borderRadius: '16px',
+                  color: '#E5ECFF'
+                }}
+              />
             </PieChart>
           </ResponsiveContainer>
         </div>

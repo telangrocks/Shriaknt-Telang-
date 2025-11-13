@@ -79,7 +79,7 @@ npm ci
 **Option C: Manual Dependency Installation**
 ```powershell
 cd backend-services
-npm install express pg redis jsonwebtoken bcryptjs cors helmet express-rate-limit joi dotenv winston ccxt twilio axios node-cron --save
+npm install express pg redis jsonwebtoken bcryptjs cors helmet express-rate-limit joi dotenv winston ccxt @supabase/supabase-js axios node-cron --save
 npm install nodemon jest supertest --save-dev
 ```
 
@@ -212,7 +212,7 @@ node scripts/monitor-health.js
 
 1. **Use CI/CD Pipeline:** Set up automated testing in CI/CD
 2. **Test Database:** Use separate test database
-3. **Mock Services:** Mock external services (Firebase Admin, Cashfree) in tests
+3. **Mock Services:** Mock external services (Supabase Auth, Cashfree) in tests
 4. **Test Coverage:** Aim for > 70% code coverage
 5. **Performance Baseline:** Establish performance baselines
 

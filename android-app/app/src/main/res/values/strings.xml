@@ -2,24 +2,25 @@
 <resources>
     <string name="app_name">Cryptopulse</string>
     <string name="splash_tagline">Sign in to continue to your account</string>
-    <string name="auth_request_button">Send OTP</string>
-    <string name="auth_verify_button">Verify OTP</string>
-    <string name="auth_phone_hint">+1 555 123 4567</string>
-    <string name="auth_otp_hint">000000</string>
-    <string name="auth_requesting_otp">Requesting OTP…</string>
-    <string name="auth_verifying_otp">Verifying OTP…</string>
+    <string name="auth_sign_in">Sign In</string>
+    <string name="auth_create_account">Create an account</string>
+    <string name="auth_switch_to_sign_in">Have an account? Sign in</string>
+    <string name="auth_switch_to_register">Need an account? Register</string>
+    <string name="auth_email_heading">Access your account</string>
+    <string name="auth_email_subheading">Use your email address to sign in or create a new account.</string>
+    <string name="auth_email_label">Email Address</string>
+    <string name="auth_email_hint">you@example.com</string>
+    <string name="auth_password_label">Password</string>
+    <string name="auth_password_hint">Enter your password</string>
+    <string name="auth_confirm_password_label">Confirm Password</string>
+    <string name="auth_confirm_password_hint">Re-enter your password</string>
     <string name="auth_error_network">Network error. Please check your connection.</string>
-    <string name="auth_error_invalid_phone">Please enter a valid phone number.</string>
-    <string name="auth_error_invalid_otp">Please enter the 6-digit OTP.</string>
-    <string name="auth_registration_heading">Register your phone</string>
-    <string name="auth_registration_subheading">Step 1 of 2 · We will text a one-time passcode</string>
-    <string name="auth_phone_label">Phone Number</string>
-    <string name="auth_otp_label">Step 2 of 2 · Enter OTP</string>
-    <string name="auth_retry">Retry</string>
-    <string name="auth_phone_instructions">OTP will be sent to this number. Include country code.</string>
-    <string name="auth_otp_instruction">Enter the 6-digit code we just sent you.</string>
     <string name="auth_existing_session_message">You're already signed in. Taking you to your dashboard...</string>
-    <string name="auth_otp_sent_message">OTP sent successfully. Please enter the 6-digit code.</string>
-    <string name="auth_login_success_message">Phone verified. Signing you in...</string>
+    <string name="auth_login_success_message">Authenticated successfully. Redirecting…</string>
+    <string name="auth_error_password_mismatch">Passwords do not match. Please try again.</string>
+    
+    <!-- Security Section -->
+    <string name="auth_security_title">Multi-factor security powered by Cryptopulse AI</string>
+    <string name="auth_security_description">We use secure email authentication to keep your trading operations safe and compliant.</string>
 </resources>
 

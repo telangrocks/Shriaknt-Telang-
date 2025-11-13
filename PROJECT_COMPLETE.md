@@ -166,7 +166,7 @@ This document summarizes the **complete end-to-end trading bot system** that has
 ## 🔑 Key Features Implemented
 
 ### ✅ Authentication & Security
-- [x] Firebase-based phone authentication and messaging
+- [x] Supabase-based email authentication and in-app notifications
 - [x] JWT token management
 - [x] Refresh token support
 - [x] Session management in Redis
@@ -284,9 +284,9 @@ DATABASE_URL
 REDIS_URL
 JWT_SECRET
 REFRESH_TOKEN_SECRET
-TWILIO_ACCOUNT_SID
-TWILIO_AUTH_TOKEN
-TWILIO_PHONE_NUMBER
+SUPABASE_URL
+SUPABASE_ANON_KEY
+SUPABASE_JWT_SECRET
 CASHFREE_APP_ID
 CASHFREE_SECRET_KEY
 CASHFREE_WEBHOOK_SECRET
@@ -392,7 +392,7 @@ ab -n 1000 -c 10 https://your-api/health
 **Subtotal**: ~$75/month
 
 ### Third-Party Services:
-- **Firebase**: Phone Auth usage subject to Google Cloud pricing (most tiers free for moderate usage)
+- **Supabase Auth**: Email/password authentication subject to Supabase pricing tiers
 - **Cashfree**: 2% transaction fee
 - **Domain** (optional): ~$1/month
 
@@ -541,7 +541,7 @@ ab -n 1000 -c 10 https://your-api/health
 - [Northflank Docs](https://northflank.com/docs)
 - [CCXT Library](https://docs.ccxt.com)
 - [Cashfree API](https://docs.cashfree.com)
-- [Firebase Phone Authentication](https://firebase.google.com/docs/auth/android/phone-auth)
+- [Supabase Email Authentication](https://supabase.com/docs/guides/auth)
 - [PostgreSQL Guide](https://www.postgresql.org/docs/)
 - [Redis Documentation](https://redis.io/documentation)
 

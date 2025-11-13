@@ -7,7 +7,7 @@ Complete step-by-step guide for deploying the Cryptopulse Trading Bot System.
 - Northflank account
 - PostgreSQL database (or use Northflank addon)
 - Redis instance (or use Northflank addon)
-- Firebase project with Phone Auth & Cloud Messaging enabled
+- Supabase project configured for email/password authentication
 - Cashfree account with production credentials
 - Domain name (optional but recommended)
 
@@ -37,7 +37,7 @@ Required variables:
 - `REDIS_URL` - Redis connection string
 - `JWT_SECRET` - 32+ character random string
 - `REFRESH_TOKEN_SECRET` - 32+ character random string
-- `FIREBASE_SERVICE_ACCOUNT` - Base64 encoded Firebase service account JSON
+- `SUPABASE_JWT_SECRET` - Supabase JWT secret for verifying access tokens
 - `CASHFREE_APP_ID` - From Cashfree dashboard
 - `CASHFREE_SECRET_KEY` - From Cashfree dashboard
 - `CASHFREE_WEBHOOK_SECRET` - Webhook secret
@@ -348,12 +348,12 @@ node scripts/performance-test.js
 3. Verify webhook signature
 4. Check payment logs
 
-### Firebase Auth Issues
+### Supabase Auth Issues
 
-1. Verify Firebase service account credentials
-2. Confirm Phone Auth is enabled for the project
-3. Check Firebase Authentication logs for rate limits or errors
-4. Ensure reCAPTCHA and device verification complete successfully on clients
+1. Verify Supabase URL, anonymous key, and JWT secret are set in the environment
+2. Confirm email/password provider is enabled for the project
+3. Check Supabase Auth logs for password policy or rate limit errors
+4. Ensure clients send the Supabase access token to `/api/auth/supabase-login` immediately after login
 
 ## Support
 

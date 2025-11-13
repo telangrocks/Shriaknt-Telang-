@@ -39,6 +39,23 @@ object ApiClient {
         retrofit.create(ApiService::class.java)
     }
 
+    private val supabaseRetrofit: Retrofit by lazy {
+        val baseUrl = BuildConfig.SUPABASE_URL
+        require(baseUrl.isNotBlank()) {
+            "BuildConfig.SUPABASE_URL is blank. Provide the Supabase project URL via build config."
+        }
+
+        Retrofit.Builder()
+            .baseUrl(ensureTrailingSlash(baseUrl))
+            .client(okHttpClient)
+            .addConverterFactory(GsonConverterFactory.create())
+            .build()
+    }
+
+    val supabaseAuthService: SupabaseAuthService by lazy {
+        supabaseRetrofit.create(SupabaseAuthService::class.java)
+    }
+
     private fun ensureTrailingSlash(url: String): String {
         return if (url.endsWith("/")) url else "$url/"
     }

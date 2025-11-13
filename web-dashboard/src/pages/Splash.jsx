@@ -19,19 +19,17 @@ const Splash = () => {
   }, [])
 
   return (
-    <div className="min-h-screen bg-slate-950 flex items-center justify-center px-6">
-      <div className="max-w-3xl w-full text-center space-y-6">
-        <div className="inline-flex items-center justify-center px-6 py-3 rounded-full border border-blue-500/60 bg-blue-500/10 text-blue-200 uppercase tracking-[0.35em] text-xs sm:text-sm">
-          Cryptopulse
-        </div>
-        <h1 className="text-3xl sm:text-4xl md:text-5xl font-semibold text-white">
-          Shrikant Telang — Virtual Software Engineer
+    <div className="min-h-screen flex items-center justify-center px-6">
+      <div className="w-full max-w-3xl text-center space-y-8">
+        <span className="app-pill text-sm sm:text-base">Cryptopulse</span>
+        <h1 className="heading-xl text-3xl sm:text-4xl md:text-5xl">
+          Initializing Secure Trading Environment
         </h1>
-        <p className="text-lg sm:text-xl text-slate-300">
-          Sign in to continue to your account
+        <p className="text-base sm:text-lg text-muted">
+          Please hold while we synchronize your AI-driven market intelligence suite.
         </p>
-        <div className="flex flex-col items-center gap-3 text-slate-400">
-          <div className="h-1 w-32 sm:w-40 bg-gradient-to-r from-blue-500 via-indigo-500 to-purple-500 rounded-full animate-pulse" />
+        <div className="flex flex-col items-center gap-4 text-muted">
+          <div className="h-1.5 w-40 sm:w-56 rounded-full bg-gradient-to-r from-accent-500 via-accent-300 to-success animate-pulse" />
           <p className="text-sm sm:text-base transition-all duration-500 ease-out">
             {phrases[phraseIndex]}
           </p>

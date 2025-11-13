@@ -220,8 +220,8 @@ Before going live, verify:
 ### Issue: Redis connection fails
 **Solution**: Ensure Redis is running and REDIS_URL is correct
 
-### Issue: OTP not sending
-**Solution**: Provide Firebase service account credentials and ensure Phone Auth is enabled
+### Issue: Email authentication failing
+**Solution**: Provide Supabase project credentials (URL, anon key, JWT secret) and verify the email/password exists in Supabase Auth
 
 ### Issue: Payment webhook not receiving
 **Solution**: Verify webhook URL is publicly accessible and signature matches

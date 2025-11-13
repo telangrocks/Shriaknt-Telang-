@@ -16,10 +16,10 @@ describe('E2E: Authentication Flow', () => {
     }
   });
 
-  describe('Firebase Login Validation', () => {
-    it('should reject login attempt without Firebase token', async () => {
+  describe('Supabase Login Validation', () => {
+    it('should reject login attempt without Supabase token', async () => {
       const response = await request(app)
-        .post('/api/auth/firebase-login')
+        .post('/api/auth/supabase-login')
         .send({});
 
       expect(response.status).toBe(400);

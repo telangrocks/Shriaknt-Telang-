@@ -23,61 +23,52 @@ const UsersTab = () => {
   }
 
   if (loading) {
-    return <div className="text-center py-8">Loading users...</div>
+    return <div className="text-center py-8 text-muted">Loading users…</div>
   }
 
   return (
-    <div className="space-y-4">
-      <div className="flex justify-between items-center">
-        <h2 className="text-xl font-semibold">User Management</h2>
-        <span className="text-sm text-gray-400">{users.length} users</span>
+    <div className="space-y-5">
+      <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+        <div>
+          <h2 className="heading-lg text-xl">User Management</h2>
+          <p className="text-sm text-muted">Real-time roster of verified Cryptopulse accounts</p>
+        </div>
+        <span className="text-sm text-muted uppercase tracking-[0.4em]">{users.length} users</span>
       </div>
 
-      <div className="overflow-x-auto">
-        <table className="min-w-full divide-y divide-gray-700">
-          <thead>
-            <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
-                ID
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
-                Phone
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
-                Name
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
-                Email
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
-                Subscription
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
-                Created
-              </th>
+      <div className="overflow-x-auto rounded-3xl border border-white/5">
+        <table className="min-w-full divide-y divide-white/6 text-sm">
+          <thead className="bg-ocean-900/60">
+            <tr className="text-left text-xs font-semibold uppercase tracking-[0.4em] text-muted">
+              <th className="px-6 py-4">ID</th>
+              <th className="px-6 py-4">Phone</th>
+              <th className="px-6 py-4">Name</th>
+              <th className="px-6 py-4">Email</th>
+              <th className="px-6 py-4">Subscription</th>
+              <th className="px-6 py-4">Created</th>
             </tr>
           </thead>
-          <tbody className="bg-gray-800 divide-y divide-gray-700">
+          <tbody className="divide-y divide-white/5 bg-ocean-900/30">
             {users.map((user) => (
-              <tr key={user.id} className="hover:bg-gray-750">
-                <td className="px-6 py-4 whitespace-nowrap text-sm">{user.id}</td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm">{user.phone}</td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm">{user.name || '-'}</td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm">{user.email || '-'}</td>
-                <td className="px-6 py-4 whitespace-nowrap">
+              <tr key={user.id} className="transition hover:bg-ocean-900/60 hover:backdrop-blur-md">
+                <td className="px-6 py-4 text-accent-100/90">{user.id}</td>
+                <td className="px-6 py-4 text-accent-100/90">{user.phone}</td>
+                <td className="px-6 py-4 text-accent-100/90">{user.name || '-'}</td>
+                <td className="px-6 py-4 text-accent-100/90">{user.email || '-'}</td>
+                <td className="px-6 py-4">
                   <span
-                    className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                    className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-medium ${
                       user.subscription_status === 'active'
-                        ? 'bg-green-900 text-green-200'
+                        ? 'bg-success/10 text-success'
                         : user.subscription_status === 'trial'
-                        ? 'bg-yellow-900 text-yellow-200'
-                        : 'bg-red-900 text-red-200'
+                        ? 'bg-warning/10 text-warning'
+                        : 'bg-danger/10 text-danger'
                     }`}
                   >
                     {user.subscription_status}
                   </span>
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-400">
+                <td className="px-6 py-4 text-muted">
                   {new Date(user.created_at).toLocaleString()}
                 </td>
               </tr>

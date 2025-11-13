@@ -2,10 +2,10 @@ const request = require('supertest');
 const app = require('../../../src/server');
 
 describe('Auth Routes - Unit Tests', () => {
-  describe('POST /api/auth/firebase-login', () => {
-    it('should return 400 when idToken is missing', async () => {
+  describe('POST /api/auth/supabase-login', () => {
+    it('should return 400 when accessToken is missing', async () => {
       const response = await request(app)
-        .post('/api/auth/firebase-login')
+        .post('/api/auth/supabase-login')
         .send({});
 
       expect(response.status).toBe(400);

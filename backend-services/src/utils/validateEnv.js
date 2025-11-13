@@ -21,7 +21,7 @@ const requiredEnvVars = [
   'AI_TARGET_PROFITABILITY',
   'MAX_CONCURRENT_TRADES',
   'ENCRYPTION_KEY',
-  'FIREBASE_SERVICE_ACCOUNT'
+  'SUPABASE_JWT_SECRET'
 ];
 
 function validateEnv() {
@@ -30,12 +30,6 @@ function validateEnv() {
   requiredEnvVars.forEach(varName => {
     if (varName === 'ENCRYPTION_KEY') {
       return;
-    }
-
-    if (varName === 'FIREBASE_SERVICE_ACCOUNT') {
-      if (process.env.FIREBASE_SERVICE_ACCOUNT || process.env.FIREBASE_SERVICE_ACCOUNT_PATH) {
-        return;
-      }
     }
 
     if (!process.env[varName]) {

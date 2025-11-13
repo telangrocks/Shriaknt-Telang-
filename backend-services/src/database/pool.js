@@ -11,7 +11,7 @@ const USER_FOREIGN_KEY_MAPPINGS = [
   { tableName: 'user_strategies', columnName: 'user_id' },
   { tableName: 'trades', columnName: 'user_id' },
   { tableName: 'payments', columnName: 'user_id' },
-  { tableName: 'device_tokens', columnName: 'user_id' }
+  { tableName: 'notifications', columnName: 'user_id' }
 ];
 
 function quoteIdentifier(identifier) {
@@ -225,7 +225,8 @@ async function initializeSchema(client) {
     await client.query(`
       CREATE TABLE IF NOT EXISTS users (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        phone VARCHAR(20) UNIQUE NOT NULL,
+        phone VARCHAR(20) UNIQUE,
+        supabase_user_id UUID UNIQUE,
         name VARCHAR(255),
         email VARCHAR(255),
         is_active BOOLEAN DEFAULT true,
@@ -242,6 +243,21 @@ async function initializeSchema(client) {
 
     // Ensure users.id is UUID (for existing databases)
     await ensureUsersIdIsUuid(client);
+
+    await client.query(
+      'ALTER TABLE public.users ALTER COLUMN phone DROP NOT NULL'
+    );
+
+    await client.query(`
+      ALTER TABLE public.users
+      ADD COLUMN IF NOT EXISTS supabase_user_id UUID UNIQUE
+    `);
+
+    await client.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email_unique
+      ON public.users(email)
+      WHERE email IS NOT NULL
+    `);
 
     // FIXED: exchange_keys with UUID user_id
     await client.query(`
@@ -363,27 +379,16 @@ async function initializeSchema(client) {
       )
     `);
 
-    // Create otp_verifications table (no user_id - no changes needed)
     await client.query(`
-      CREATE TABLE IF NOT EXISTS otp_verifications (
-        id SERIAL PRIMARY KEY,
-        phone VARCHAR(20) NOT NULL,
-        otp_code VARCHAR(6) NOT NULL,
-        is_verified BOOLEAN DEFAULT false,
-        expires_at TIMESTAMP NOT NULL,
-        attempts INTEGER DEFAULT 0,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )
-    `);
-
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS device_tokens (
+      CREATE TABLE IF NOT EXISTS notifications (
         id SERIAL PRIMARY KEY,
         user_id UUID REFERENCES users(id) ON DELETE CASCADE,
-        token TEXT UNIQUE NOT NULL,
-        platform VARCHAR(50) DEFAULT 'android',
+        title VARCHAR(255) NOT NULL,
+        body TEXT NOT NULL,
+        data JSONB,
+        is_read BOOLEAN DEFAULT false,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        read_at TIMESTAMP
       )
     `);
 
@@ -393,7 +398,7 @@ async function initializeSchema(client) {
     await ensureForeignKeyColumnIsUuid(client, 'user_strategies', 'user_id');
     await ensureForeignKeyColumnIsUuid(client, 'trades', 'user_id');
     await ensureForeignKeyColumnIsUuid(client, 'payments', 'user_id');
-    await ensureForeignKeyColumnIsUuid(client, 'device_tokens', 'user_id');
+    await ensureForeignKeyColumnIsUuid(client, 'notifications', 'user_id');
 
     // Create indexes
     await client.query(`
@@ -408,8 +413,8 @@ async function initializeSchema(client) {
       CREATE INDEX IF NOT EXISTS idx_trades_status ON trades(status);
       CREATE INDEX IF NOT EXISTS idx_payments_user_id ON payments(user_id);
       CREATE INDEX IF NOT EXISTS idx_payments_status ON payments(status);
-      CREATE INDEX IF NOT EXISTS idx_otp_phone ON otp_verifications(phone);
-      CREATE INDEX IF NOT EXISTS idx_device_tokens_user_id ON device_tokens(user_id);
+      CREATE INDEX IF NOT EXISTS idx_notifications_user_id
+        ON notifications(user_id, is_read, created_at DESC);
     `);
 
     await insertDefaultStrategies(client);

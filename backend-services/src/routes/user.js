@@ -195,67 +195,79 @@ router.put('/strategies/:id/toggle', verifyToken, async (req, res) => {
   }
 });
 
-// Register device token
-router.post('/device-tokens', verifyToken, async (req, res) => {
+// Fetch notifications
+router.get('/notifications', verifyToken, async (req, res) => {
   try {
-    const { token, platform } = req.body;
-
-    if (!token) {
-      return res.status(400).json({
-        error: 'Missing required fields',
-        message: 'Device token is required'
-      });
-    }
-
     const pool = createPool();
-    await pool.query(
-      `INSERT INTO device_tokens (user_id, token, platform, updated_at)
-       VALUES ($1, $2, COALESCE($3, 'android'), NOW())
-       ON CONFLICT (token)
-       DO UPDATE SET user_id = EXCLUDED.user_id, platform = EXCLUDED.platform, updated_at = NOW()`,
-      [req.userId, token, platform]
+    const result = await pool.query(
+      `SELECT id, title, body, data, is_read, created_at, read_at
+       FROM notifications
+       WHERE user_id = $1
+       ORDER BY created_at DESC
+       LIMIT 50`,
+      [req.userId]
     );
 
     res.json({
       success: true,
-      message: 'Device token registered successfully'
+      notifications: result.rows
     });
   } catch (error) {
-    logger.error('Error registering device token:', error);
+    logger.error('Error fetching notifications:', error);
     res.status(500).json({
       error: 'Internal server error',
-      message: 'Failed to register device token'
+      message: 'Failed to fetch notifications'
     });
   }
 });
 
-// Remove device token
-router.delete('/device-tokens', verifyToken, async (req, res) => {
+// Mark notification as read
+router.post('/notifications/:id/read', verifyToken, async (req, res) => {
   try {
-    const { token } = req.body;
-
-    if (!token) {
-      return res.status(400).json({
-        error: 'Missing required fields',
-        message: 'Device token is required'
-      });
-    }
-
+    const { id } = req.params;
     const pool = createPool();
     await pool.query(
-      `DELETE FROM device_tokens WHERE token = $1 AND user_id = $2`,
-      [token, req.userId]
+      `UPDATE notifications
+       SET is_read = true,
+           read_at = NOW()
+       WHERE id = $1 AND user_id = $2`,
+      [id, req.userId]
     );
 
     res.json({
       success: true,
-      message: 'Device token removed successfully'
+      message: 'Notification marked as read'
     });
   } catch (error) {
-    logger.error('Error removing device token:', error);
+    logger.error('Error marking notification as read:', error);
     res.status(500).json({
       error: 'Internal server error',
-      message: 'Failed to remove device token'
+      message: 'Failed to update notification'
+    });
+  }
+});
+
+// Mark all notifications as read
+router.post('/notifications/read-all', verifyToken, async (req, res) => {
+  try {
+    const pool = createPool();
+    await pool.query(
+      `UPDATE notifications
+       SET is_read = true,
+           read_at = NOW()
+       WHERE user_id = $1 AND is_read = false`,
+      [req.userId]
+    );
+
+    res.json({
+      success: true,
+      message: 'All notifications marked as read'
+    });
+  } catch (error) {
+    logger.error('Error marking notifications as read:', error);
+    res.status(500).json({
+      error: 'Internal server error',
+      message: 'Failed to update notifications'
     });
   }
 });

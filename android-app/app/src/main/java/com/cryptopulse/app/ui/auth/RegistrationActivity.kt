@@ -5,6 +5,8 @@ import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.text.Editable
+import android.text.TextWatcher
 import android.view.View
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
@@ -21,8 +23,8 @@ class RegistrationActivity : AppCompatActivity() {
     private lateinit var binding: ActivityRegistrationBinding
     private lateinit var viewModel: AuthViewModel
     private val preferenceManager by lazy { PreferenceManager(this) }
-    private var lastTriggeredAction: TriggeredAction = TriggeredAction.RequestOtp
     private var hasNavigatedToMain = false
+    private var isRegisterMode = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -36,6 +38,8 @@ class RegistrationActivity : AppCompatActivity() {
 
         setupObservers()
         setupClickListeners()
+        setupInputWatchers()
+        updateUiForMode()
     }
 
     override fun onResume() {
@@ -44,27 +48,11 @@ class RegistrationActivity : AppCompatActivity() {
     }
 
     private fun setupObservers() {
-        viewModel.otpSent.observe(this) { sent ->
-            if (sent) {
-                binding.otpLayout.visibility = View.VISIBLE
-                binding.btnRequestOtp.text = getString(R.string.auth_request_button)
-                showStatus(getString(R.string.auth_otp_sent_message), isError = false)
-                viewModel.consumeOtpSent()
-            }
-        }
-
-        viewModel.otpMessage.observe(this) { message ->
-            message?.let {
-                showStatus(it, isError = false)
-                Toast.makeText(this, it, Toast.LENGTH_SHORT).show()
-                viewModel.consumeOtpMessage()
-            }
-        }
-
         viewModel.loginSuccess.observe(this) { success ->
             if (success) {
                 showStatus(getString(R.string.auth_login_success_message), isError = false)
                 navigateToMain()
+                viewModel.clearSuccess()
             }
         }
 
@@ -74,52 +62,85 @@ class RegistrationActivity : AppCompatActivity() {
             } else {
                 showStatus(error, isError = true)
                 Toast.makeText(this, error, Toast.LENGTH_SHORT).show()
+                viewModel.consumeError()
             }
         }
 
         viewModel.isLoading.observe(this) { loading ->
             binding.progressBar.visibility = if (loading) View.VISIBLE else View.GONE
-            binding.btnRequestOtp.isEnabled = !loading
-            binding.btnVerifyOtp.isEnabled = !loading
-            binding.btnRetry.isEnabled = !loading
-            binding.etPhone.isEnabled = !loading
-            binding.etOtp.isEnabled = !loading
-            if (loading) {
-                when (lastTriggeredAction) {
-                    TriggeredAction.RequestOtp -> {
-                        binding.btnRequestOtp.text = getString(R.string.auth_requesting_otp)
-                        binding.btnVerifyOtp.text = getString(R.string.auth_verify_button)
-                    }
-                    TriggeredAction.VerifyOtp -> {
-                        binding.btnVerifyOtp.text = getString(R.string.auth_verifying_otp)
-                        binding.btnRequestOtp.text = getString(R.string.auth_request_button)
-                    }
-                }
-            } else {
-                binding.btnRequestOtp.text = getString(R.string.auth_request_button)
-                binding.btnVerifyOtp.text = getString(R.string.auth_verify_button)
-            }
+            binding.btnPrimaryAction.isEnabled = !loading
+            binding.btnToggleMode.isEnabled = !loading
+            binding.etEmail.isEnabled = !loading
+            binding.etPassword.isEnabled = !loading
+            binding.etConfirmPassword.isEnabled = !loading && isRegisterMode
         }
     }
 
     private fun setupClickListeners() {
-        binding.btnRequestOtp.setOnClickListener {
+        binding.btnPrimaryAction.setOnClickListener {
             hideStatus()
-            lastTriggeredAction = TriggeredAction.RequestOtp
-            val phone = binding.etPhone.text.toString()
-            viewModel.requestOTP(this@RegistrationActivity, phone)
+            val email = binding.etEmail.text.toString()
+            val password = binding.etPassword.text.toString()
+            val confirmPassword = binding.etConfirmPassword.text.toString()
+
+            if (isRegisterMode && password != confirmPassword) {
+                showStatus(getString(R.string.auth_error_password_mismatch), isError = true)
+                return@setOnClickListener
+            }
+
+            viewModel.authenticate(
+                email = email,
+                password = password,
+                createAccount = isRegisterMode
+            )
         }
 
-        binding.btnVerifyOtp.setOnClickListener {
+        binding.btnToggleMode.setOnClickListener {
             hideStatus()
-            lastTriggeredAction = TriggeredAction.VerifyOtp
-            val otp = binding.etOtp.text.toString()
-            viewModel.verifyOTP(otp)
+            isRegisterMode = !isRegisterMode
+            updateUiForMode()
         }
+    }
 
-        binding.btnRetry.setOnClickListener {
-            hideStatus()
-            viewModel.retryLastAction(this@RegistrationActivity)
+    private fun setupInputWatchers() {
+        binding.etEmail.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+            override fun afterTextChanged(s: Editable?) {
+                hideStatus()
+            }
+        })
+
+        binding.etPassword.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+            override fun afterTextChanged(s: Editable?) {
+                hideStatus()
+            }
+        })
+
+        binding.etConfirmPassword.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+            override fun afterTextChanged(s: Editable?) {
+                hideStatus()
+            }
+        })
+    }
+
+    private fun updateUiForMode() {
+        if (isRegisterMode) {
+            binding.titleText.text = getString(R.string.auth_create_account)
+            binding.subtitleText.text = getString(R.string.auth_email_subheading)
+            binding.btnPrimaryAction.text = getString(R.string.auth_create_account)
+            binding.btnToggleMode.text = getString(R.string.auth_switch_to_sign_in)
+            binding.confirmPasswordGroup.visibility = View.VISIBLE
+        } else {
+            binding.titleText.text = getString(R.string.auth_email_heading)
+            binding.subtitleText.text = getString(R.string.auth_email_subheading)
+            binding.btnPrimaryAction.text = getString(R.string.auth_sign_in)
+            binding.btnToggleMode.text = getString(R.string.auth_switch_to_register)
+            binding.confirmPasswordGroup.visibility = View.GONE
         }
     }
 
@@ -144,12 +165,10 @@ class RegistrationActivity : AppCompatActivity() {
         container.background = background
         textView.text = message
         container.visibility = View.VISIBLE
-        binding.btnRetry.visibility = if (isError) View.VISIBLE else View.GONE
     }
 
     private fun hideStatus() {
         binding.statusContainer.visibility = View.GONE
-        binding.btnRetry.visibility = View.GONE
     }
 
     private fun maybeNavigateToMainIfSessionActive() {
@@ -160,9 +179,8 @@ class RegistrationActivity : AppCompatActivity() {
         if (isLoggedIn && token.isNotEmpty()) {
             showStatus(getString(R.string.auth_existing_session_message), isError = false)
             binding.progressBar.visibility = View.VISIBLE
-            binding.btnRequestOtp.isEnabled = false
-            binding.btnVerifyOtp.isEnabled = false
-            binding.btnRetry.visibility = View.GONE
+            binding.btnPrimaryAction.isEnabled = false
+            binding.btnToggleMode.isEnabled = false
             Handler(Looper.getMainLooper()).postDelayed({
                 navigateToMain()
             }, EXISTING_SESSION_REDIRECT_DELAY)
@@ -181,16 +199,9 @@ class RegistrationActivity : AppCompatActivity() {
         finish()
     }
 
-    private enum class TriggeredAction {
-        RequestOtp,
-        VerifyOtp
-    }
-
     companion object {
         private const val EXISTING_SESSION_REDIRECT_DELAY = 650L
         private const val KEY_IS_LOGGED_IN = "is_logged_in"
         private const val KEY_AUTH_TOKEN = "auth_token"
     }
 }
-
-

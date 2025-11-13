@@ -20,7 +20,7 @@ async function verifyToken(req, res, next) {
     try {
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
       req.userId = decoded.userId;
-      req.userPhone = decoded.phone;
+      req.userEmail = decoded.email;
       
       // Verify session exists
       const session = await getSession(decoded.userId);

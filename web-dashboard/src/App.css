@@ -2,17 +2,48 @@
 @tailwind components;
 @tailwind utilities;
 
-body {
-  margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
-    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
-    sans-serif;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+@layer base {
+  * {
+    @apply antialiased;
+  }
+
+  html,
+  body,
+  #root {
+    @apply min-h-screen bg-night-sky text-accent-100;
+  }
+
+  body {
+    margin: 0;
+    @apply font-sans text-accent-100;
+  }
 }
 
-code {
-  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
-    monospace;
+@layer components {
+  .app-card {
+    @apply rounded-[28px] border border-white/5 bg-ocean-900/70 backdrop-blur-2xl shadow-card;
+  }
+
+  .app-card-soft {
+    @apply rounded-[24px] border border-white/5 bg-ocean-800/60 backdrop-blur-xl shadow-card;
+  }
+
+  .app-pill {
+    @apply inline-flex items-center gap-2 px-6 py-2 rounded-full border border-accent-400/40 bg-accent-500/10 text-xs uppercase tracking-[0.35em] text-accent-200;
+  }
+
+  .heading-xl {
+    @apply text-4xl font-semibold text-accent-100;
+  }
+
+  .heading-lg {
+    @apply text-2xl font-semibold text-accent-100;
+  }
+
+  .text-muted {
+    @apply text-muted-400;
+  }
 }
 

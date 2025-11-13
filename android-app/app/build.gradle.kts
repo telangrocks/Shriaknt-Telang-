@@ -3,7 +3,6 @@ plugins {
     id("org.jetbrains.kotlin.android")
     id("kotlin-kapt")
     id("kotlin-parcelize")
-    id("com.google.gms.google-services") version "4.4.2"
 }
 
 android {
@@ -23,6 +22,11 @@ android {
         buildConfigField("String", "CASHFREE_APP_ID", "\"your-cashfree-app-id\"")
         buildConfigField("String", "CASHFREE_ENV", "\"production\"")
 
+        val supabaseUrl = project.findProperty("SUPABASE_URL") as String? ?: ""
+        val supabaseAnonKey = project.findProperty("SUPABASE_ANON_KEY") as String? ?: ""
+        buildConfigField("String", "SUPABASE_URL", "\"$supabaseUrl\"")
+        buildConfigField("String", "SUPABASE_ANON_KEY", "\"$supabaseAnonKey\"")
+
         vectorDrawables {
             useSupportLibrary = true
         }
@@ -40,6 +44,14 @@ android {
         debug {
             isMinifyEnabled = false
             buildConfigField("String", "API_BASE_URL", "\"http://10.0.2.2:3000/api/\"")
+
+            val debugSupabaseUrl = project.findProperty("SUPABASE_URL_DEBUG") as String?
+                ?: project.findProperty("SUPABASE_URL") as String? ?: ""
+            val debugSupabaseAnonKey = project.findProperty("SUPABASE_ANON_KEY_DEBUG") as String?
+                ?: project.findProperty("SUPABASE_ANON_KEY") as String? ?: ""
+
+            buildConfigField("String", "SUPABASE_URL", "\"$debugSupabaseUrl\"")
+            buildConfigField("String", "SUPABASE_ANON_KEY", "\"$debugSupabaseAnonKey\"")
         }
     }
 
@@ -105,12 +117,6 @@ dependencies {
     implementation("com.squareup.retrofit2:converter-gson:2.9.0")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("com.squareup.okhttp3:logging-interceptor:4.12.0")
-
-    // Firebase
-    implementation(platform("com.google.firebase:firebase-bom:33.3.0"))
-    implementation("com.google.firebase:firebase-auth-ktx")
-    implementation("com.google.firebase:firebase-messaging-ktx")
-    implementation("com.google.firebase:firebase-analytics-ktx")
 
     // Coroutines
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")

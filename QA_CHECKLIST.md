@@ -11,7 +11,7 @@ Complete checklist for deploying the Cryptopulse Trading Bot System to productio
 - [ ] Encryption key is 64 characters (32 bytes hex)
 - [ ] Database URL configured correctly
 - [ ] Redis URL configured correctly
-- [ ] Firebase service account configured (backend)
+- [ ] Supabase credentials configured (backend: `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_JWT_SECRET`)
 - [ ] Cashfree credentials added and tested
 - [ ] API_BASE_URL set to production domain
 - [ ] ALLOWED_ORIGINS configured for CORS
@@ -68,8 +68,7 @@ Complete checklist for deploying the Cryptopulse Trading Bot System to productio
 
 ### API Endpoint Verification
 - [ ] `/health` returns 200
-- [ ] `/api/auth/request-otp` works
-- [ ] `/api/auth/verify-otp` works
+- [ ] `/api/auth/supabase-login` exchanges Supabase access token successfully
 - [ ] `/api/market/signals` returns data
 - [ ] `/api/trade/execute` requires auth
 - [ ] `/api/payment/create-order` works
@@ -90,12 +89,12 @@ Complete checklist for deploying the Cryptopulse Trading Bot System to productio
 - [ ] Deep link callbacks work
 - [ ] Payment history retrievable
 
-### OTP Flow
-- [ ] Firebase Phone Auth works end-to-end
-- [ ] OTP stored in Redis
-- [ ] OTP verification works
-- [ ] OTP expires after 5 minutes
-- [ ] Max attempts enforced
+### Email Authentication Flow
+- [ ] Supabase email/password sign-in works end-to-end (web + Android)
+- [ ] New account registration (Supabase sign-up) works
+- [ ] Backend session tokens issued after Supabase exchange
+- [ ] Password validation enforced (minimum length, mismatch handling)
+- [ ] Session refresh endpoint works
 
 ## ✅ Android App Testing
 
@@ -107,13 +106,12 @@ Complete checklist for deploying the Cryptopulse Trading Bot System to productio
 
 ### Functionality
 - [ ] Splash screen displays correctly
-- [ ] OTP login works
+- [ ] Email authentication works (sign-in + sign-up)
 - [ ] Trial activation works (5 days)
 - [ ] Exchange API key entry works
 - [ ] Market scanning works
 - [ ] Trading signals display correctly
-- [ ] Real-time notifications work
-- [ ] Sound alerts work
+- [ ] In-app bell notifications surface new trade alerts
 - [ ] Background services run reliably
 - [ ] Payment flow works
 - [ ] Deep link callbacks work
@@ -224,7 +222,7 @@ Before going live, ensure:
 1. All environment variables are set
 2. Database and Redis are accessible
 3. Payment gateway is in production mode
-4. Firebase Authentication and Cloud Messaging are configured for production
+4. Supabase authentication and in-app notifications are configured for production
 5. SSL certificates are valid
 6. Monitoring is active
 7. Backup strategy is in place

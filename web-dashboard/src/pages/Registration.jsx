@@ -1,13 +1,23 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Phone, ShieldCheck, RefreshCcw, Loader2, RotateCcw } from 'lucide-react'
-import { RecaptchaVerifier, signInWithPhoneNumber } from 'firebase/auth'
+import {
+  ShieldCheck,
+  Loader2,
+  Phone,
+  MessageSquare,
+  CheckCircle2,
+  ArrowLeft,
+  RotateCcw
+} from 'lucide-react'
+import { supabase } from '../lib/supabaseClient'
 import { api } from '../services/api'
 import { AUTH_TOKEN_KEY, REFRESH_TOKEN_KEY } from '../constants/auth'
-import { getFirebaseAuth } from '../lib/firebaseClient'
 
-const PHONE_REGEX = /^\+?[1-9]\d{6,14}$/
-const OTP_REGEX = /^\d{6}$/
-const RESEND_COOLDOWN_SECONDS = 45
+const PHONE_REGEX = /^\+\d{8,15}$/
+const OTP_REGEX = /^\d{4,8}$/
+const STEPS = {
+  PHONE: 'phone',
+  VERIFY: 'verify'
+}
 
 const resolveErrorMessage = (error) => {
   if (error?.response) {
@@ -17,24 +27,6 @@ const resolveErrorMessage = (error) => {
       return message
     }
     return `Request failed with status ${status}`
-  }
-
-  if (error?.code?.startsWith('auth/')) {
-    switch (error.code) {
-      case 'auth/invalid-phone-number':
-        return 'This phone number is invalid. Please include the country code.'
-      case 'auth/too-many-requests':
-        return 'Too many attempts. Please wait a few minutes and try again.'
-      case 'auth/quota-exceeded':
-        return 'OTP quota exceeded for this Firebase project. Try again later.'
-      case 'auth/invalid-verification-code':
-        return 'The verification code is incorrect. Double-check and try again.'
-      case 'auth/missing-verification-code':
-      case 'auth/code-expired':
-        return 'The verification code has expired. Request a new OTP.'
-      default:
-        return error.message || 'Firebase authentication error. Please try again.'
-    }
   }
 
   if (error?.code === 'ECONNABORTED') {
@@ -48,107 +40,75 @@ const resolveErrorMessage = (error) => {
   return error?.message || 'Unexpected error occurred. Please try again.'
 }
 
-const formatSeconds = (seconds) => {
-  if (seconds == null) {
+const resolveAuthError = (error) => {
+  if (!error) {
+    return 'Unexpected authentication error. Please try again.'
+  }
+
+  if (typeof error === 'string') {
+    return error
+  }
+
+  if (error?.error_description) {
+    return error.error_description
+  }
+
+  if (error?.message) {
+    return error.message
+  }
+
+  if (error?.data?.msg) {
+    return error.data.msg
+  }
+
+  return 'Authentication failed. Please try again.'
+}
+
+const normalizePhoneNumber = (rawValue) => {
+  if (!rawValue) {
     return ''
   }
-  const clamped = Math.max(0, seconds)
-  const minutes = Math.floor(clamped / 60)
-  const remainder = clamped % 60
-  if (minutes <= 0) {
-    return `${remainder}s`
+
+  const trimmed = rawValue.replace(/\s+/g, '')
+  if (trimmed.startsWith('+')) {
+    return `+${trimmed.slice(1).replace(/[^\d]/g, '')}`
   }
-  return `${minutes}m ${String(remainder).padStart(2, '0')}s`
+
+  if (trimmed.startsWith('00')) {
+    return `+${trimmed.slice(2).replace(/[^\d]/g, '')}`
+  }
+
+  return `+${trimmed.replace(/[^\d]/g, '')}`
 }
 
 const Registration = ({ setIsAuthenticated }) => {
+  const [step, setStep] = useState(STEPS.PHONE)
   const [phone, setPhone] = useState('')
   const [otp, setOtp] = useState('')
-  const [step, setStep] = useState(1)
   const [status, setStatus] = useState(null)
   const [isLoading, setIsLoading] = useState(false)
-  const [lastAction, setLastAction] = useState(null)
-  const [resendCooldown, setResendCooldown] = useState(0)
-  const [otpExpirySeconds, setOtpExpirySeconds] = useState(null)
-  const [confirmationResult, setConfirmationResult] = useState(null)
-  const [, setFirebaseToken] = useState(null)
+  const [resendTimer, setResendTimer] = useState(0)
 
-  const auth = useMemo(() => {
-    try {
-      return getFirebaseAuth()
-    } catch (error) {
-      console.error('Failed to initialise Firebase auth:', error)
-      return null
-    }
-  }, [])
-
-  useEffect(() => {
-    if (resendCooldown <= 0) {
-      return
-    }
-    const interval = window.setInterval(() => {
-      setResendCooldown((prev) => (prev > 0 ? prev - 1 : 0))
-    }, 1000)
-
-    return () => window.clearInterval(interval)
-  }, [resendCooldown])
-
-  useEffect(() => {
-    if (otpExpirySeconds == null || otpExpirySeconds <= 0) {
-      return
-    }
-    const interval = window.setInterval(() => {
-      setOtpExpirySeconds((prev) => {
-        if (prev == null) {
-          return prev
-        }
-        return prev > 0 ? prev - 1 : 0
-      })
-    }, 1000)
-
-    return () => window.clearInterval(interval)
-  }, [otpExpirySeconds])
-
-  useEffect(() => {
-    return () => {
-      if (typeof window !== 'undefined' && window.firebaseRecaptchaVerifier) {
-        window.firebaseRecaptchaVerifier.clear()
-        window.firebaseRecaptchaVerifier = null
-      }
-    }
-  }, [])
-
-  const phoneIsValid = useMemo(() => PHONE_REGEX.test(phone.trim()), [phone])
+  const normalizedPhone = useMemo(() => normalizePhoneNumber(phone), [phone])
+  const phoneIsValid = useMemo(() => PHONE_REGEX.test(normalizedPhone), [normalizedPhone])
   const otpIsValid = useMemo(() => OTP_REGEX.test(otp.trim()), [otp])
+
+  useEffect(() => {
+    if (step === STEPS.VERIFY && resendTimer > 0) {
+      const interval = window.setInterval(
+        () => setResendTimer((prev) => (prev > 0 ? prev - 1 : 0)),
+        1000
+      )
+      return () => window.clearInterval(interval)
+    }
+    return undefined
+  }, [resendTimer, step])
 
   const showStatus = useCallback((message, type) => {
     setStatus({ message, type })
   }, [])
 
-  const ensureRecaptcha = useCallback(async () => {
-    if (typeof window === 'undefined' || !auth) {
-      throw new Error('Firebase auth unavailable')
-    }
-
-    if (window.firebaseRecaptchaVerifier) {
-      return window.firebaseRecaptchaVerifier
-    }
-
-    const verifier = new RecaptchaVerifier(auth, 'firebase-recaptcha-container', {
-      size: 'invisible',
-      callback: () => {
-        // invisible reCAPTCHA solved automatically
-      },
-      'expired-callback': () => {
-        window.firebaseRecaptchaVerifier?.clear()
-        window.firebaseRecaptchaVerifier = null
-      }
-    })
-
-    await verifier.render()
-    window.firebaseRecaptchaVerifier = verifier
-    return verifier
-  }, [auth])
+  const clearStatus = useCallback(() => setStatus(null), [])
 
   const persistAuthSession = useCallback((token, refreshToken) => {
     if (token) {
@@ -159,266 +119,243 @@ const Registration = ({ setIsAuthenticated }) => {
     }
   }, [])
 
-  const handleRequestOtp = useCallback(async () => {
-    const normalizedPhone = phone.trim()
-
-    if (!PHONE_REGEX.test(normalizedPhone)) {
-      showStatus('Please enter a valid phone number including country code.', 'error')
-      return
-    }
-
-    if (!auth) {
-      showStatus('Firebase authentication is not configured. Please contact support.', 'error')
+  const handleSendOtp = useCallback(async () => {
+    if (!phoneIsValid) {
+      showStatus('Enter a valid phone number with the country code prefix.', 'error')
       return
     }
 
     setIsLoading(true)
-    setLastAction('request')
-    showStatus('Preparing secure OTP request…', 'info')
+    showStatus('Requesting a secure OTP…', 'info')
 
     try {
-      const verifier = await ensureRecaptcha()
-      console.log('debug: auth', auth)
-      console.log('debug: verifier', verifier)
-      const confirmation = await signInWithPhoneNumber(auth, normalizedPhone, verifier)
-      setConfirmationResult(confirmation)
-      showStatus('OTP sent successfully. Please enter the 6-digit code.', 'success')
-      setStep(2)
-      setOtp('')
-      setResendCooldown(RESEND_COOLDOWN_SECONDS)
-      setOtpExpirySeconds(300)
+      const { error } = await supabase.auth.signInWithOtp({
+        phone: normalizedPhone,
+        options: { channel: 'sms' }
+      })
+
+      if (error) {
+        throw error
+      }
+
+      showStatus('OTP sent successfully. Enter the code to continue.', 'success')
+      setStep(STEPS.VERIFY)
+      setResendTimer(45)
     } catch (error) {
-      console.error('Error requesting OTP from Firebase:', error)
-      window.firebaseRecaptchaVerifier?.clear()
-      window.firebaseRecaptchaVerifier = null
-      showStatus(resolveErrorMessage(error), 'error')
+      console.error('OTP request error:', error)
+      if (error?.response) {
+        showStatus(resolveErrorMessage(error), 'error')
+      } else {
+        showStatus(resolveAuthError(error), 'error')
+      }
     } finally {
       setIsLoading(false)
     }
-  }, [auth, ensureRecaptcha, phone, showStatus])
+  }, [normalizedPhone, phoneIsValid, showStatus])
 
-  const handleVerifyOtp = useCallback(async () => {
-    const normalizedPhone = phone.trim()
-    const normalizedOtp = otp.trim()
-
-    if (!PHONE_REGEX.test(normalizedPhone)) {
-      showStatus('Please enter a valid phone number including country code.', 'error')
-      return
-    }
-
-    if (!OTP_REGEX.test(normalizedOtp)) {
-      showStatus('Enter the 6-digit OTP we sent you to continue.', 'error')
-      return
-    }
-
-    if (!auth) {
-      showStatus('Firebase authentication is not configured. Please contact support.', 'error')
+  const handleOtpVerification = useCallback(async () => {
+    if (!otpIsValid) {
+      showStatus('Enter the verification code sent to your phone.', 'error')
       return
     }
 
     setIsLoading(true)
-    setLastAction('verify')
     showStatus('Verifying your code…', 'info')
 
     try {
-      if (!confirmationResult) {
-        showStatus('Request a new OTP before verifying.', 'error')
-        return
+      const { data, error } = await supabase.auth.verifyOtp({
+        phone: normalizedPhone,
+        token: otp.trim(),
+        type: 'sms'
+      })
+
+      if (error) {
+        throw error
       }
 
-      const result = await confirmationResult.confirm(normalizedOtp)
-      const idToken = await result.user.getIdToken()
-      setFirebaseToken(idToken)
-      localStorage.setItem('firebase_id_token', idToken)
+      const session = data?.session
 
-      const { data } = await api.post('/auth/firebase-login', { idToken })
+      if (!session?.access_token) {
+        throw new Error('Verification failed: no session returned.')
+      }
 
-      if (data?.success && data?.token) {
-        persistAuthSession(data.token, data?.refreshToken)
+      const { data: apiData, error: apiError } = await api.post('/auth/supabase-login', {
+        accessToken: session.access_token
+      })
+
+      if (apiError) {
+        throw apiError
+      }
+
+      if (apiData?.success && apiData?.token) {
+        persistAuthSession(apiData.token, apiData?.refreshToken)
         showStatus(
-          data?.message || 'Phone verified. Redirecting you to the dashboard…',
+          apiData?.message || 'Phone verified. Redirecting you to the dashboard…',
           'success'
         )
         setIsAuthenticated(true)
         setOtp('')
-        setOtpExpirySeconds(null)
       } else {
-        showStatus(
-          data?.message || data?.error || 'Verification failed. Please try again.',
-          'error'
+        throw new Error(
+          apiData?.message || apiData?.error || 'Session exchange failed. Please try again.'
         )
       }
     } catch (error) {
-      console.error('Error verifying Firebase OTP or exchanging token:', error)
-      showStatus(resolveErrorMessage(error), 'error')
+      console.error('OTP verification error:', error)
+      if (error?.response) {
+        showStatus(resolveErrorMessage(error), 'error')
+      } else {
+        showStatus(resolveAuthError(error), 'error')
+      }
     } finally {
       setIsLoading(false)
     }
-  }, [confirmationResult, otp, persistAuthSession, setIsAuthenticated, showStatus])
+  }, [normalizedPhone, otp, otpIsValid, persistAuthSession, setIsAuthenticated, showStatus])
 
-  const handleRetry = () => {
-    if (isLoading) return
-    if (lastAction === 'request') {
-      handleRequestOtp()
-    } else if (lastAction === 'verify') {
-      handleVerifyOtp()
-    }
-  }
-
-  const handleSubmit = (event) => {
-    event.preventDefault()
-    if (step === 1) {
-      handleRequestOtp()
-    } else {
-      handleVerifyOtp()
-    }
+  const handleBackToPhone = () => {
+    setStep(STEPS.PHONE)
+    setOtp('')
+    clearStatus()
   }
 
   return (
-    <div className="min-h-screen bg-slate-950 flex items-center justify-center px-4 py-12">
-      <div className="w-full max-w-lg space-y-10">
-        <div className="text-center space-y-3">
-          <div className="inline-flex items-center gap-2 px-5 py-2 rounded-full border border-blue-400/50 bg-blue-500/10 text-blue-200 text-xs uppercase tracking-[0.35em]">
-            Cryptopulse
-          </div>
-          <h2 className="text-3xl sm:text-4xl font-semibold text-white">
-            Register your phone
-          </h2>
-          <p className="text-sm sm:text-base text-slate-300">
-            Step {step} of 2 · Secure access to your Cryptopulse account
+    <div className="min-h-screen flex items-center justify-center px-4 py-16">
+      <div className="w-full max-w-3xl space-y-10">
+        <div className="text-center space-y-4">
+          <span className="app-pill">Cryptopulse</span>
+          <p className="text-muted text-sm uppercase tracking-[0.45em]">
+            Step {step === STEPS.PHONE ? '1' : '2'} of 2 · Secure access to your Cryptopulse account
+          </p>
+          <h1 className="heading-xl">Register your phone</h1>
+          <p className="text-base text-muted">
+            Multi-factor security powered by Cryptopulse AI keeps your trading operations safe and
+            compliant.
           </p>
         </div>
 
-        <div className="bg-slate-900/70 backdrop-blur border border-slate-800/80 rounded-3xl shadow-2xl p-8 space-y-8">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 flex items-center gap-4">
-            <ShieldCheck className="h-10 w-10 text-blue-400" />
-            <div className="text-sm text-slate-300 text-left">
-              <p className="font-medium text-white">
+        <div className="app-card p-10 space-y-8">
+          <div className="app-card-soft p-6 flex flex-col sm:flex-row sm:items-center gap-4">
+            <div className="flex h-13 w-13 items-center justify-center rounded-3xl bg-accent-500/15 border border-accent-400/30 text-accent-300">
+              <ShieldCheck className="h-6 w-6" />
+            </div>
+            <div className="space-y-1 text-sm text-muted">
+              <p className="text-base font-medium text-accent-100">
                 Multi-factor security powered by Cryptopulse AI
               </p>
-              <p className="mt-1">
-                We use OTP verification to keep your trading operations safe and compliant.
+              <p>
+                We deliver OTP verification instantly to keep your trading operations compliant and
+                protected.
               </p>
             </div>
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-6">
-            <div className="space-y-4">
-              <label
-                className="block text-sm font-medium text-slate-300"
-                htmlFor="phone-number"
-              >
-                Phone Number
-              </label>
-              <div
-                className={`flex items-center gap-3 px-4 py-3 rounded-2xl border ${
-                  phoneIsValid ? 'border-blue-500/60' : 'border-slate-700'
-                } bg-slate-900/80 focus-within:ring-2 focus-within:ring-blue-500/60`}
-              >
-                <Phone className="h-5 w-5 text-blue-300" />
-                <input
-                  type="tel"
-                  inputMode="tel"
-                  autoComplete="tel"
-                  placeholder="+1 555 123 4567"
-                  className="w-full bg-transparent outline-none text-white placeholder:text-slate-500"
-                  id="phone-number"
-                  name="phone"
-                  value={phone}
-                  onChange={(event) => setPhone(event.target.value)}
-                />
-              </div>
-              <p className="text-xs text-slate-400">
-                OTP will be sent to this number. Include country code and ensure SMS reception.
-              </p>
-            </div>
-
-            {step === 2 && (
+          <div className="space-y-6">
+            {step === STEPS.PHONE ? (
               <div className="space-y-4">
-                <label
-                  className="block text-sm font-medium text-slate-300"
-                  htmlFor="otp-code"
-                >
-                  One-Time Passcode
+                <label className="text-sm font-medium text-muted uppercase tracking-wide" htmlFor="phone">
+                  Phone number
                 </label>
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  autoComplete="one-time-code"
-                  maxLength={6}
-                  placeholder="Enter 6-digit OTP"
-                  className="w-full px-4 py-3 rounded-2xl border border-slate-700 bg-slate-900/80 text-center tracking-[0.4em] text-lg text-white outline-none focus:border-blue-500/60 focus:ring-2 focus:ring-blue-500/40"
-                  id="otp-code"
-                  name="otp"
-                  value={otp}
-                  onChange={(event) => setOtp(event.target.value.replace(/\D/g, ''))}
-                />
-                <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-slate-400">
-                  <span>
-                    {otpExpirySeconds != null && otpExpirySeconds > 0
-                      ? `OTP expires in ${formatSeconds(otpExpirySeconds)}`
-                      : 'OTP has expired. Request a new one.'}
-                  </span>
+                <div
+                  className={`flex items-center gap-3 px-5 py-4 rounded-3xl border ${
+                    phoneIsValid ? 'border-accent-400/60 shadow-glow' : 'border-white/8'
+                  } bg-ocean-800/70 focus-within:border-accent-400/80 focus-within:shadow-glow transition`}
+                >
+                  <Phone className="h-5 w-5 text-accent-300" />
+                  <input
+                    type="tel"
+                    inputMode="tel"
+                    autoComplete="tel"
+                    placeholder="+1 555 123 4567"
+                    className="w-full bg-transparent outline-none text-accent-100 placeholder:text-muted-500 text-base"
+                    id="phone"
+                    name="phone"
+                    value={phone}
+                    onChange={(event) => setPhone(event.target.value)}
+                  />
+                </div>
+                <p className="text-sm text-muted">
+                  OTP will be sent to this number. Include the country code and ensure SMS reception.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                  <div className="space-y-1">
+                    <span className="text-xs uppercase tracking-[0.45em] text-muted">
+                      Verify code
+                    </span>
+                    <p className="text-lg font-semibold text-accent-100">
+                      Enter the 6-digit code sent to {normalizedPhone}
+                    </p>
+                  </div>
                   <button
                     type="button"
-                    disabled={resendCooldown > 0 || isLoading}
-                    onClick={handleRequestOtp}
-                    className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full border transition ${
-                      resendCooldown > 0 || isLoading
-                        ? 'border-slate-700 text-slate-500 cursor-not-allowed'
-                        : 'border-blue-500/60 text-blue-300 hover:text-blue-200 hover:border-blue-400'
-                    }`}
+                    onClick={handleBackToPhone}
+                    className="inline-flex items-center gap-2 text-sm text-muted hover:text-accent-200 transition"
                   >
-                    <RefreshCcw className="h-4 w-4" />
-                    {resendCooldown > 0 ? `Resend in ${formatSeconds(resendCooldown)}` : 'Resend OTP'}
+                    <ArrowLeft className="h-4 w-4" />
+                    Edit number
+                  </button>
+                </div>
+
+                <div className="flex items-center gap-3 px-6 py-5 rounded-3xl border border-white/8 bg-ocean-800/70 focus-within:border-accent-400/60 focus-within:shadow-glow transition">
+                  <MessageSquare className="h-5 w-5 text-accent-300" />
+                  <input
+                    type="tel"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    maxLength={8}
+                    placeholder="••••••"
+                    className="w-full bg-transparent outline-none text-center text-2xl tracking-[0.6em] text-accent-100 placeholder:text-muted-500"
+                    value={otp}
+                    onChange={(event) => setOtp(event.target.value.replace(/[^\d]/g, ''))}
+                  />
+                </div>
+
+                <div className="flex items-center justify-between text-sm text-muted">
+                  <span>Didn&apos;t receive it?</span>
+                  <button
+                    type="button"
+                    onClick={handleSendOtp}
+                    disabled={isLoading || resendTimer > 0}
+                    className="inline-flex items-center gap-2 text-accent-200 hover:text-accent-100 disabled:text-muted-500 disabled:cursor-not-allowed transition"
+                  >
+                    <RotateCcw className="h-4 w-4" />
+                    {resendTimer > 0 ? `Resend in ${resendTimer}s` : 'Resend OTP'}
                   </button>
                 </div>
               </div>
             )}
 
             <button
-              type="submit"
+              type="button"
               disabled={isLoading}
-              className="w-full inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-blue-600 hover:bg-blue-500 disabled:bg-blue-600/60 disabled:cursor-not-allowed text-white font-medium transition"
+              onClick={step === STEPS.PHONE ? handleSendOtp : handleOtpVerification}
+              className="w-full inline-flex items-center justify-center gap-2 px-6 py-4 rounded-3xl bg-accent-500 hover:bg-accent-400 disabled:bg-accent-500/60 disabled:cursor-not-allowed text-white font-semibold text-base transition shadow-lg shadow-accent-500/20"
             >
               {isLoading && <Loader2 className="h-5 w-5 animate-spin" />}
-              {step === 1 ? 'Send OTP' : 'Verify & Sign In'}
+              {step === STEPS.PHONE ? 'Send OTP' : 'Verify & Continue'}
             </button>
-          </form>
 
-          {status && (
-            <div
-              className={`rounded-2xl border px-5 py-4 text-sm ${
-                status.type === 'error'
-                  ? 'border-red-500/60 bg-red-500/10 text-red-200'
-                  : status.type === 'success'
-                  ? 'border-emerald-500/60 bg-emerald-500/10 text-emerald-200'
-                  : 'border-blue-500/40 bg-blue-500/10 text-blue-200'
-              }`}
-            >
-              <div className="flex items-center justify-between gap-3">
-                <p>{status.message}</p>
-                {status.type === 'error' && lastAction && (
-                  <button
-                    type="button"
-                    onClick={handleRetry}
-                    disabled={isLoading}
-                    className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-current text-xs uppercase tracking-wide hover:bg-white/10 disabled:opacity-60"
-                  >
-                    <RotateCcw className="h-4 w-4" />
-                    Retry
-                  </button>
-                )}
+            {status && (
+              <div
+                className={`app-card-soft border ${
+                  status.type === 'error'
+                    ? 'border-danger/50 bg-danger/10 text-danger'
+                    : status.type === 'success'
+                    ? 'border-success/40 bg-success/10 text-success'
+                    : 'border-accent-400/40 bg-accent-500/10 text-accent-200'
+                } flex items-start gap-3 px-5 py-4`}
+              >
+                <CheckCircle2 className="h-5 w-5 mt-0.5" />
+                <p className="text-sm leading-relaxed">{status.message}</p>
               </div>
-            </div>
-          )}
+            )}
+          </div>
         </div>
       </div>
-      <div id="firebase-recaptcha-container" className="hidden" aria-hidden="true" />
     </div>
   )
 }
 
 export default Registration
-
-

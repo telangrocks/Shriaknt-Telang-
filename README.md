@@ -17,7 +17,7 @@ Complete AI-powered cryptocurrency trading bot system with Android app, web dash
 ## ✨ Features
 
 ### Backend Services
-- ✅ Firebase-based phone authentication (Firebase Auth + Admin SDK)
+- ✅ Supabase-backed email authentication and session exchange
 - ✅ AI-powered trading signal generation (85-90% target profitability)
 - ✅ Multi-exchange support (Binance, Bybit, OKX)
 - ✅ Real-time market data scanning (2-second intervals)
@@ -30,11 +30,10 @@ Complete AI-powered cryptocurrency trading bot system with Android app, web dash
 - ✅ JWT authentication
 - ✅ Encrypted API key storage
 
-### Android App
 - ✅ Splash screen
-- ✅ Firebase Phone Authentication
+- ✅ Email authentication flow (Supabase + backend session)
 - ✅ Real-time trading signals dashboard
-- ✅ Push notifications via Firebase Cloud Messaging with sound alerts
+- ✅ In-app bell notifications for trade alerts
 - ✅ Trading interface
 - ✅ Exchange API key management
 - ✅ Payment integration
@@ -126,8 +125,8 @@ REDIS_URL=redis://localhost:6379
 JWT_SECRET=your-super-secret-jwt-key
 REFRESH_TOKEN_SECRET=your-super-secret-refresh-token-key
 
-# Firebase Admin
-FIREBASE_SERVICE_ACCOUNT=base64-encoded-service-account-json
+# Supabase Auth
+SUPABASE_JWT_SECRET=your-supabase-jwt-secret
 
 # Cashfree Payment
 CASHFREE_APP_ID=your-cashfree-app-id
@@ -170,7 +169,7 @@ docker run -p 3000:3000 --env-file .env cryptopulse-backend
 
 ### Authentication
 
-- `POST /api/auth/firebase-login` - Exchange Firebase ID token for Cryptopulse session
+- `POST /api/auth/supabase-login` - Exchange Supabase access token for Cryptopulse session
 - `POST /api/auth/refresh-token` - Refresh JWT token
 - `GET /api/auth/me` - Get current user
 - `POST /api/auth/logout` - Logout

@@ -167,7 +167,7 @@ Ensure `app/proguard-rules.pro` includes:
 ### Runtime Errors
 
 1. **Network errors**: Check API endpoint configuration
-2. **OTP not received**: Confirm Firebase project configuration (Phone Auth enabled, SHA hashes added)
+2. **Authentication failing**: Confirm Supabase project URL, anon key, and JWT secret are present in build config
 3. **Payment fails**: Check Cashfree configuration
 
 ## Release Checklist

@@ -30,9 +30,9 @@ Use these values (replace placeholders with real secrets and domains) when confi
 | `AI_TARGET_PROFITABILITY` | `85` | Strategy tuning. |
 | `MAX_CONCURRENT_TRADES` | `10` | Strategy tuning. |
 | `SUPPORTED_EXCHANGES` | `binance,bybit,okx` | Optional. |
-| `FIREBASE_SERVICE_ACCOUNT` | base64 encoded Firebase service account JSON | Required for verifying Firebase ID tokens and FCM notifications. |
+| `SUPABASE_JWT_SECRET` | `super-secret-from-supabase` | Required to validate Supabase access tokens. |
 
-> **CORS:** make sure `ALLOWED_ORIGINS` contains the exact protocol + host (and port if any) for every frontend deployment. Missing origins will block Firebase token exchange with “Unable to reach Cryptopulse servers”.
+> **CORS:** make sure `ALLOWED_ORIGINS` contains the exact protocol + host (and port if any) for every frontend deployment. Missing origins will block the Supabase token exchange with “Unable to reach Cryptopulse servers”.
 
 ---
 
@@ -43,13 +43,8 @@ When building with GitHub Actions or Northflank, supply the following build-time
 | Variable | Example | Notes |
 | --- | --- | --- |
 | `VITE_API_BASE_URL` | `https://api.cryptopulse.live` | Must match backend `API_BASE_URL` (no trailing slash). |
-| `VITE_FIREBASE_API_KEY` | `AIza...` | Firebase web API key. |
-| `VITE_FIREBASE_AUTH_DOMAIN` | `cryptopulse-71537.firebaseapp.com` | Firebase auth domain. |
-| `VITE_FIREBASE_PROJECT_ID` | `cryptopulse-71537` | Firebase project id. |
-| `VITE_FIREBASE_STORAGE_BUCKET` | `cryptopulse-71537.firebasestorage.app` | Firebase storage bucket. |
-| `VITE_FIREBASE_MESSAGING_SENDER_ID` | `324707004601` | Firebase messaging sender id. |
-| `VITE_FIREBASE_APP_ID` | `1:324707004601:web:abc123` | Firebase web app id. |
-| `VITE_FIREBASE_MEASUREMENT_ID` | `G-XXXXXXX` | Optional analytics measurement id. |
+| `VITE_SUPABASE_URL` | `https://your-project.supabase.co` | Supabase project URL. |
+| `VITE_SUPABASE_ANON_KEY` | `supabase-anon-key` | Supabase anonymous key. |
 
 Optional (only if you customise preview/serve commands):
 
@@ -65,6 +60,8 @@ Edit `app/build.gradle.kts` or use CI variables:
 
 ```properties
 API_BASE_URL=https://api.cryptopulse.live/api/
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_ANON_KEY=supabase-anon-key
 ```
 
 Compose other SDK-related keys (`CASHFREE_APP_ID`, etc.) via Gradle buildConfig fields or CI.
@@ -84,8 +81,8 @@ Compose other SDK-related keys (`CASHFREE_APP_ID`, etc.) via Gradle buildConfig 
    - Frontend reachable via HTTPS and allowed in `ALLOWED_ORIGINS`.
 4. **Smoke Test**
    - Visit splash → registration.
-   - Complete Firebase phone auth on web or Android.
-   - Confirm dashboards load with valid JWT session and push notifications arrive.
+   - Complete email registration via Supabase.
+   - Confirm dashboards load with valid JWT session and in-app bell notifications appear.
 
 Keep this document updated when new services or variables are introduced.
 

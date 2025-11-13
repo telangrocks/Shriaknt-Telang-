@@ -1,102 +1,145 @@
-const express = require('express');
-const router = express.Router();
-const jwt = require('jsonwebtoken');
-const { createPool } = require('../database/pool');
-const { setSession } = require('../services/redis');
-const { verifyToken } = require('../middleware/auth');
-const logger = require('../utils/logger');
-const { getFirebaseAuth } = require('../services/firebaseAdmin');
+const express = require('express')
+const jwt = require('jsonwebtoken')
+const router = express.Router()
+const { createPool } = require('../database/pool')
+const { setSession } = require('../services/redis')
+const { verifyToken } = require('../middleware/auth')
+const logger = require('../utils/logger')
 
-async function getOrCreateUserByPhone(phone, existingPool) {
-  const pool = existingPool || createPool();
+const SUPABASE_JWT_SECRET = process.env.SUPABASE_JWT_SECRET
 
-  let userResult = await pool.query(
-    `SELECT id FROM users WHERE phone = $1`,
-    [phone]
-  );
+if (!SUPABASE_JWT_SECRET) {
+  logger.warn('SUPABASE_JWT_SECRET is not set. Authentication will fail until this is configured.')
+}
 
-  let userId;
-  let isNewUser = false;
+async function getOrCreateUserByEmail(email, supabaseUserId, existingPool) {
+  const pool = existingPool || createPool()
+
+  const normalizedEmail = email ? email.toLowerCase() : null
+
+  const userResult = await pool.query(
+    `
+      SELECT id, supabase_user_id
+      FROM users
+      WHERE (supabase_user_id = $1 AND supabase_user_id IS NOT NULL)
+         OR (LOWER(email) = LOWER($2) AND email IS NOT NULL)
+      LIMIT 1
+    `,
+    [supabaseUserId, normalizedEmail]
+  )
+
+  const trialDays = parseInt(process.env.TRIAL_DAYS, 10) || 5
+  const trialEndDate = new Date()
+  trialEndDate.setDate(trialEndDate.getDate() + trialDays)
 
   if (userResult.rows.length === 0) {
-    const trialDays = parseInt(process.env.TRIAL_DAYS, 10) || 5;
-    const trialEndDate = new Date();
-    trialEndDate.setDate(trialEndDate.getDate() + trialDays);
-
     const newUser = await pool.query(
-      `INSERT INTO users (phone, trial_start_date, trial_end_date, subscription_status, is_verified)
-       VALUES ($1, NOW(), $2, 'trial', true)
-       RETURNING id`,
-      [phone, trialEndDate]
-    );
+      `
+        INSERT INTO users (
+          email,
+          supabase_user_id,
+          is_verified,
+          trial_start_date,
+          trial_end_date,
+          subscription_status
+        )
+        VALUES ($1, $2, true, NOW(), $3, 'trial')
+        RETURNING id
+      `,
+      [normalizedEmail, supabaseUserId, trialEndDate]
+    )
 
-    userId = newUser.rows[0].id;
-    isNewUser = true;
-  } else {
-    userId = userResult.rows[0].id;
-    await pool.query(
-      `UPDATE users SET is_verified = true, updated_at = NOW() WHERE id = $1`,
-      [userId]
-    );
+    return { userId: newUser.rows[0].id, isNewUser: true }
   }
 
-  return { userId, isNewUser };
+  const existingUser = userResult.rows[0]
+
+  if (!existingUser.supabase_user_id) {
+    await pool.query(
+      `
+        UPDATE users
+        SET supabase_user_id = $1,
+            is_verified = true,
+            email = COALESCE(email, $2),
+            updated_at = NOW()
+        WHERE id = $3
+      `,
+      [supabaseUserId, normalizedEmail, existingUser.id]
+    )
+  }
+
+  return { userId: existingUser.id, isNewUser: false }
 }
 
-async function issueAuthTokens(userId, phone) {
+async function issueAuthTokens(userId, email) {
   const token = jwt.sign(
-    { userId, phone },
+    { userId, email },
     process.env.JWT_SECRET,
     { expiresIn: process.env.JWT_EXPIRES_IN || '24h' }
-  );
+  )
 
   const refreshToken = jwt.sign(
-    { userId, phone },
+    { userId, email },
     process.env.REFRESH_TOKEN_SECRET,
     { expiresIn: process.env.REFRESH_TOKEN_EXPIRES_IN || '7d' }
-  );
+  )
 
-  await setSession(userId, token, refreshToken);
+  await setSession(userId, token, refreshToken)
 
-  return { token, refreshToken };
+  return { token, refreshToken }
 }
 
-// Firebase login
-router.post('/firebase-login', async (req, res) => {
+router.post('/supabase-login', async (req, res) => {
   try {
-    const { idToken } = req.body;
+    const { accessToken } = req.body
 
-    if (!idToken) {
+    if (!accessToken) {
       return res.status(400).json({
-        error: 'Missing idToken',
-        message: 'Firebase ID token is required'
-      });
+        error: 'Missing accessToken',
+        message: 'Supabase access token is required'
+      })
     }
 
-    const firebaseAuth = getFirebaseAuth();
-    let decodedToken;
+    if (!SUPABASE_JWT_SECRET) {
+      return res.status(500).json({
+        error: 'Authentication not configured',
+        message: 'Server is missing SUPABASE_JWT_SECRET configuration.'
+      })
+    }
+
+    let decodedToken
 
     try {
-      decodedToken = await firebaseAuth.verifyIdToken(idToken, true);
+      decodedToken = jwt.verify(accessToken, SUPABASE_JWT_SECRET, {
+        algorithms: ['HS256']
+      })
     } catch (error) {
-      logger.error('Failed to verify Firebase ID token:', error);
+      logger.warn('Failed to verify Supabase access token:', error)
       return res.status(401).json({
-        error: 'Invalid Firebase token',
-        message: 'The provided Firebase token is invalid or expired.'
-      });
+        error: 'Invalid Supabase token',
+        message: 'The provided Supabase token is invalid or expired.'
+      })
     }
 
-    const phone = decodedToken.phone_number;
+    const email = decodedToken.email ? decodedToken.email.toLowerCase() : null
+    const supabaseUserId = decodedToken.sub
 
-    if (!phone) {
+    if (!email) {
       return res.status(400).json({
-        error: 'Missing phone number',
-        message: 'Firebase token does not contain a phone number claim.'
-      });
+        error: 'Missing email',
+        message: 'Supabase token does not contain an email claim.'
+      })
     }
 
-    const { userId, isNewUser } = await getOrCreateUserByPhone(phone);
-    const { token, refreshToken } = await issueAuthTokens(userId, phone);
+    if (!supabaseUserId) {
+      return res.status(400).json({
+        error: 'Missing subject',
+        message: 'Supabase token does not contain a subject claim.'
+      })
+    }
+
+    const { userId, isNewUser } = await getOrCreateUserByEmail(email, supabaseUserId)
+    const { token, refreshToken } = await issueAuthTokens(userId, email)
 
     res.json({
       success: true,
@@ -105,120 +148,119 @@ router.post('/firebase-login', async (req, res) => {
       refreshToken,
       user: {
         id: userId,
-        phone,
+        email,
         isNewUser,
-        firebaseUid: decodedToken.uid
+        supabaseUserId
       }
-    });
+    })
   } catch (error) {
-    logger.error('Error during Firebase login:', error);
+    logger.error('Error during Supabase login:', error)
     res.status(500).json({
       error: 'Internal server error',
-      message: 'Failed to authenticate with Firebase'
-    });
+      message: 'Failed to authenticate with Supabase'
+    })
   }
-});
+})
 
-// Refresh token
 router.post('/refresh-token', async (req, res) => {
   try {
-    const { refreshToken } = req.body;
+    const { refreshToken } = req.body
 
     if (!refreshToken) {
       return res.status(400).json({
         error: 'Refresh token required'
-      });
+      })
     }
 
     try {
-      const decoded = jwt.verify(refreshToken, process.env.REFRESH_TOKEN_SECRET);
-      
-      // Generate new tokens
+      const decoded = jwt.verify(refreshToken, process.env.REFRESH_TOKEN_SECRET)
+
       const token = jwt.sign(
-        { userId: decoded.userId, phone: decoded.phone },
+        { userId: decoded.userId, email: decoded.email },
         process.env.JWT_SECRET,
         { expiresIn: process.env.JWT_EXPIRES_IN || '24h' }
-      );
+      )
 
       const newRefreshToken = jwt.sign(
-        { userId: decoded.userId, phone: decoded.phone },
+        { userId: decoded.userId, email: decoded.email },
         process.env.REFRESH_TOKEN_SECRET,
         { expiresIn: process.env.REFRESH_TOKEN_EXPIRES_IN || '7d' }
-      );
+      )
 
-      // Update session
-      await setSession(decoded.userId, token, newRefreshToken);
+      await setSession(decoded.userId, token, newRefreshToken)
 
       res.json({
         success: true,
         token,
         refreshToken: newRefreshToken
-      });
+      })
     } catch (error) {
       return res.status(401).json({
         error: 'Invalid refresh token',
         message: 'Please login again'
-      });
+      })
     }
   } catch (error) {
-    logger.error('Error refreshing token:', error);
+    logger.error('Error refreshing token:', error)
     res.status(500).json({
       error: 'Internal server error',
       message: 'Failed to refresh token'
-    });
+    })
   }
-});
+})
 
-// Get current user
 router.get('/me', verifyToken, async (req, res) => {
   try {
-    const pool = createPool();
-    const result = await pool.query(`
-      SELECT id, phone, name, email, subscription_status, 
-             trial_start_date, trial_end_date,
-             subscription_start_date, subscription_end_date,
-             is_active, is_verified, created_at
-      FROM users
-      WHERE id = $1
-    `, [req.userId]);
+    const pool = createPool()
+    const result = await pool.query(
+      `
+        SELECT id, phone, name, email, subscription_status,
+               trial_start_date, trial_end_date,
+               subscription_start_date, subscription_end_date,
+               is_active, is_verified, created_at
+        FROM users
+        WHERE id = $1
+      `,
+      [req.userId]
+    )
 
     if (result.rows.length === 0) {
       return res.status(404).json({
         error: 'User not found'
-      });
+      })
     }
 
     res.json({
       success: true,
       user: result.rows[0]
-    });
+    })
   } catch (error) {
-    logger.error('Error getting user:', error);
+    logger.error('Error getting user:', error)
     res.status(500).json({
       error: 'Internal server error',
       message: 'Failed to get user data'
-    });
+    })
   }
-});
+})
 
-// Logout
 router.post('/logout', verifyToken, async (req, res) => {
   try {
-    const { deleteSession } = require('../services/redis');
-    await deleteSession(req.userId);
+    const { deleteSession } = require('../services/redis')
+    await deleteSession(req.userId)
 
     res.json({
       success: true,
       message: 'Logged out successfully'
-    });
+    })
   } catch (error) {
-    logger.error('Error logging out:', error);
+    logger.error('Error logging out:', error)
     res.status(500).json({
       error: 'Internal server error',
       message: 'Failed to logout'
-    });
+    })
   }
-});
+})
 
-module.exports = router;
+module.exports = router
+
 

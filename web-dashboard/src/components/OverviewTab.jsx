@@ -45,53 +45,80 @@ const OverviewTab = ({ stats }) => {
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* P&L Chart */}
-        <div className="bg-gray-700 rounded-lg p-4">
-          <h3 className="text-lg font-semibold mb-4">P&L Performance</h3>
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <div className="app-card-soft p-6 space-y-4">
+          <div className="flex items-center justify-between">
+            <h3 className="heading-lg text-lg">P&amp;L Performance</h3>
+            <span className="text-xs uppercase tracking-[0.4em] text-muted">Last 30 days</span>
+          </div>
           <ResponsiveContainer width="100%" height={300}>
             <LineChart data={performanceData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-              <XAxis dataKey="date" stroke="#9CA3AF" />
-              <YAxis stroke="#9CA3AF" />
-              <Tooltip contentStyle={{ backgroundColor: '#1F2937', border: '1px solid #374151' }} />
-              <Line type="monotone" dataKey="pnl" stroke="#3B82F6" strokeWidth={2} />
+              <CartesianGrid strokeDasharray="4 8" stroke="rgba(255,255,255,0.06)" />
+              <XAxis dataKey="date" stroke="#7C8DB5" tickLine={false} />
+              <YAxis stroke="#7C8DB5" tickLine={false} />
+              <Tooltip
+                contentStyle={{
+                  background: '#101A31',
+                  border: '1px solid rgba(83,130,255,0.35)',
+                  borderRadius: '16px',
+                  color: '#E5ECFF'
+                }}
+              />
+              <Line type="monotone" dataKey="pnl" stroke="#5382FF" strokeWidth={2.5} dot={false} />
             </LineChart>
           </ResponsiveContainer>
         </div>
 
-        {/* Revenue Chart */}
-        <div className="bg-gray-700 rounded-lg p-4">
-          <h3 className="text-lg font-semibold mb-4">Daily Revenue</h3>
+        <div className="app-card-soft p-6 space-y-4">
+          <div className="flex items-center justify-between">
+            <h3 className="heading-lg text-lg">Daily Revenue</h3>
+            <span className="text-xs uppercase tracking-[0.4em] text-muted">Last 7 days</span>
+          </div>
           <ResponsiveContainer width="100%" height={300}>
             <BarChart data={revenueData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-              <XAxis dataKey="day" stroke="#9CA3AF" />
-              <YAxis stroke="#9CA3AF" />
-              <Tooltip contentStyle={{ backgroundColor: '#1F2937', border: '1px solid #374151' }} />
-              <Bar dataKey="revenue" fill="#10B981" />
+              <CartesianGrid strokeDasharray="4 8" stroke="rgba(255,255,255,0.06)" />
+              <XAxis dataKey="day" stroke="#7C8DB5" tickLine={false} />
+              <YAxis stroke="#7C8DB5" tickLine={false} />
+              <Tooltip
+                contentStyle={{
+                  background: '#101A31',
+                  border: '1px solid rgba(52,211,153,0.35)',
+                  borderRadius: '16px',
+                  color: '#E5ECFF'
+                }}
+              />
+              <Bar dataKey="revenue" fill="#34D399" radius={[12, 12, 12, 12]} />
             </BarChart>
           </ResponsiveContainer>
         </div>
       </div>
 
-      {/* Key Metrics */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="bg-gray-700 rounded-lg p-4">
-          <p className="text-gray-400 text-sm">Win Rate</p>
-          <p className="text-2xl font-bold mt-2">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+        <div className="app-card-soft p-5 space-y-2">
+          <p className="text-xs uppercase tracking-[0.4em] text-muted">Win Rate</p>
+          <p className="text-3xl font-semibold text-accent-100">
             {stats.trades.total_trades > 0
-              ? ((stats.trades.total_trades - stats.trades.open_trades) / stats.trades.total_trades * 100).toFixed(1)
-              : 0}%
+              ? (
+                  ((stats.trades.total_trades - stats.trades.open_trades) / stats.trades.total_trades) *
+                  100
+                ).toFixed(1)
+              : 0}
+            %
           </p>
         </div>
-        <div className="bg-gray-700 rounded-lg p-4">
-          <p className="text-gray-400 text-sm">Average Confidence</p>
-          <p className="text-2xl font-bold mt-2">{stats.signals.avg_confidence.toFixed(1)}%</p>
+        <div className="app-card-soft p-5 space-y-2">
+          <p className="text-xs uppercase tracking-[0.4em] text-muted">Average Confidence</p>
+          <p className="text-3xl font-semibold text-accent-100">
+            {stats.signals.avg_confidence.toFixed(1)}%
+          </p>
         </div>
-        <div className="bg-gray-700 rounded-lg p-4">
-          <p className="text-gray-400 text-sm">Total P&L</p>
-          <p className={`text-2xl font-bold mt-2 ${stats.trades.total_pnl >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+        <div className="app-card-soft p-5 space-y-2">
+          <p className="text-xs uppercase tracking-[0.4em] text-muted">Total P&amp;L</p>
+          <p
+            className={`text-3xl font-semibold ${
+              stats.trades.total_pnl >= 0 ? 'text-success' : 'text-danger'
+            }`}
+          >
             ₹{stats.trades.total_pnl.toLocaleString()}
           </p>
         </div>

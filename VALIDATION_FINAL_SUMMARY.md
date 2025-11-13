@@ -31,10 +31,10 @@
 **Impact:** 2 unit tests failing  
 **Solution:** Adjust test expectations or fix edge cases
 
-### 4. Firebase Configuration
-**Issue:** Legacy validation expected Twilio credentials. The project now uses Firebase Phone Auth.  
-**Impact:** Integration/E2E tests should target Firebase token exchange instead.  
-**Solution:** Provide `FIREBASE_SERVICE_ACCOUNT` for backend tests or mock Firebase Admin calls.
+### 4. Supabase Configuration
+**Issue:** Legacy validation expected Twilio credentials. The project now uses Supabase email authentication.  
+**Impact:** Integration/E2E tests should target Supabase token exchange instead.  
+**Solution:** Provide Supabase credentials (`SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_JWT_SECRET`) for backend tests or mock Supabase token verification.
 
 ---
 

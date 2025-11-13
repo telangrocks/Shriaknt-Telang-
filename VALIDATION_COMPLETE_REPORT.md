@@ -93,9 +93,9 @@
 - `REDIS_URL`
 - `JWT_SECRET`
 - `REFRESH_TOKEN_SECRET`
-- `TWILIO_ACCOUNT_SID`
-- `TWILIO_AUTH_TOKEN`
-- `TWILIO_PHONE_NUMBER`
+- `SUPABASE_URL`
+- `SUPABASE_ANON_KEY`
+- `SUPABASE_JWT_SECRET`
 - `CASHFREE_APP_ID`
 - `CASHFREE_SECRET_KEY`
 - `ENCRYPTION_KEY`
@@ -167,11 +167,11 @@ yarn install
 - Adjust test expectations for boundary conditions
 - Or update RSI calculation to handle edge cases
 
-### Issue 4: Firebase Configuration
-**Problem:** Legacy automation expected Twilio credentials; project now uses Firebase Phone Auth.  
+### Issue 4: Supabase Configuration
+**Problem:** Legacy automation expected Twilio credentials; project now uses Supabase email authentication.  
 **Solution:**
-- Provide `FIREBASE_SERVICE_ACCOUNT` when running backend locally
-- Mock Firebase Admin SDK calls in tests if credentials are unavailable
+- Provide `SUPABASE_URL`, `SUPABASE_ANON_KEY`, and `SUPABASE_JWT_SECRET` when running backend locally
+- Mock Supabase token verification in tests if credentials are unavailable
 
 ---
 
@@ -204,7 +204,7 @@ yarn install
 ```
 
 ### Priority 3: Fix Test Issues
-1. Supply Firebase service account (`FIREBASE_SERVICE_ACCOUNT`) or mock verification
+1. Supply Supabase credentials (`SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_JWT_SECRET`) or mock verification
 2. Fix RSI test edge cases
 3. Retry test suite
 

@@ -1,18 +1,4 @@
-const { getFirebaseMessaging } = require('./firebaseAdmin')
 const logger = require('../utils/logger')
-
-async function fetchUserDeviceTokens(pool, userIds) {
-  if (!userIds || userIds.length === 0) {
-    return []
-  }
-
-  const result = await pool.query(
-    `SELECT token FROM device_tokens WHERE user_id = ANY($1::uuid[])`,
-    [userIds]
-  )
-
-  return result.rows.map((row) => row.token)
-}
 
 async function sendTradeSignalNotification(pool, signal) {
   try {
@@ -26,49 +12,30 @@ async function sendTradeSignalNotification(pool, signal) {
     }
 
     const userIds = usersResult.rows.map((row) => row.user_id)
-    const tokens = await fetchUserDeviceTokens(pool, userIds)
 
-    if (tokens.length === 0) {
-      return
+    const title = `${signal.signal_type === 'BUY' ? 'Buy' : 'Sell'} signal: ${signal.trading_pair}`
+    const body = `Confidence ${signal.confidence_score}% • Entry ${signal.entry_price}`
+    const data = {
+      signalId: String(signal.id),
+      exchange: signal.exchange_name,
+      pair: signal.trading_pair,
+      type: signal.signal_type || '',
+      confidence: String(signal.confidence_score ?? ''),
+      entryPrice: String(signal.entry_price ?? ''),
+      stopLoss: String(signal.stop_loss ?? ''),
+      takeProfit: String(signal.take_profit ?? '')
     }
 
-    const messaging = getFirebaseMessaging()
-    const payload = {
-      tokens,
-      notification: {
-        title: `${signal.signal_type === 'BUY' ? 'Buy' : 'Sell'} signal: ${signal.trading_pair}`,
-        body: `Confidence ${signal.confidence_score}% • Entry ${signal.entry_price}`
-      },
-      data: {
-        signalId: String(signal.id),
-        exchange: signal.exchange_name,
-        pair: signal.trading_pair,
-        type: signal.signal_type || '',
-        confidence: String(signal.confidence_score ?? ''),
-        entryPrice: String(signal.entry_price ?? ''),
-        stopLoss: String(signal.stop_loss ?? ''),
-        takeProfit: String(signal.take_profit ?? '')
-      }
-    }
+    await pool.query(
+      `
+        INSERT INTO notifications (user_id, title, body, data)
+        SELECT uid, $2, $3, $4::jsonb
+        FROM unnest($1::uuid[]) AS uid
+      `,
+      [userIds, title, body, JSON.stringify(data)]
+    )
 
-    const response = await messaging.sendEachForMulticast(payload)
-
-    const failedTokens = []
-    response.responses.forEach((res, idx) => {
-      if (!res.success) {
-        failedTokens.push(tokens[idx])
-        logger.warn(
-          `Failed to deliver notification to token ${tokens[idx]}: ${res.error?.message}`
-        )
-      }
-    })
-
-    if (failedTokens.length > 0) {
-      await pool.query(
-        `DELETE FROM device_tokens WHERE token = ANY($1::text[])`,
-        [failedTokens]
-      )
-    }
+    logger.info(`Stored notifications for ${userIds.length} users subscribed to ${signal.trading_pair}.`)
   } catch (error) {
     logger.error('Error sending trade notification:', error)
   }
