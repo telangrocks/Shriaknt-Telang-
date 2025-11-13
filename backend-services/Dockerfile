@@ -1,4 +1,5 @@
 # Multi-stage build for production optimization
+# Using Node.js 20 for Supabase compatibility (requires >=20.0.0)
 FROM node:20-alpine AS builder
 
 WORKDIR /app
