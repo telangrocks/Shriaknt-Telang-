@@ -2,6 +2,9 @@
 # Using Node.js 20 for Supabase compatibility (requires >=20.0.0)
 FROM node:20-alpine AS builder
 
+# Verify Node version
+RUN node --version
+
 WORKDIR /app
 
 # Copy package files
