@@ -1,4 +1,8 @@
-require('dotenv').config();
+// Load environment variables from .env file (for local development)
+// In production/Docker, environment variables are injected directly by the platform
+// dotenv.config() won't override existing environment variables
+require('dotenv').config({ override: false });
+
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');

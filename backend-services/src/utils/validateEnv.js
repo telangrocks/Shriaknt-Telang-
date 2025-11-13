@@ -26,20 +26,75 @@ const requiredEnvVars = [
 
 function validateEnv() {
   const missing = [];
+  const empty = [];
+  
+  // Log environment information for debugging (in production, this helps diagnose issues)
+  const isProduction = process.env.NODE_ENV === 'production';
+  
+  if (isProduction) {
+    // In production, log which required vars are available (without values)
+    const availableVars = requiredEnvVars.filter(varName => {
+      const value = process.env[varName];
+      return value !== undefined && value !== null && value !== '';
+    });
+    logger.info(`Environment validation: ${availableVars.length}/${requiredEnvVars.length} required variables are set`);
+    
+    // Log specifically about SUPABASE_JWT_SECRET for debugging
+    if (!process.env.SUPABASE_JWT_SECRET) {
+      logger.warn('SUPABASE_JWT_SECRET is not set. Checking for common alternative names...');
+      // Check for common alternative names
+      const alternatives = ['SUPABASE_JWT', 'JWT_SECRET_SUPABASE', 'SUPABASE_SECRET'];
+      const found = alternatives.find(alt => process.env[alt]);
+      if (found) {
+        logger.error(`Found alternative name '${found}' but expected 'SUPABASE_JWT_SECRET'. Please update your configuration.`);
+      }
+      
+      // Check all env vars that contain 'SUPABASE' or 'JWT'
+      const relatedVars = Object.keys(process.env).filter(key => 
+        key.toUpperCase().includes('SUPABASE') || key.toUpperCase().includes('JWT')
+      );
+      if (relatedVars.length > 0) {
+        logger.info(`Related environment variables found: ${relatedVars.join(', ')}`);
+      }
+    }
+  }
   
   requiredEnvVars.forEach(varName => {
     if (varName === 'ENCRYPTION_KEY') {
       return;
     }
 
-    if (!process.env[varName]) {
+    const value = process.env[varName];
+    if (value === undefined || value === null) {
       missing.push(varName);
+    } else if (value === '') {
+      empty.push(varName);
     }
   });
 
-  if (missing.length > 0) {
-    logger.error('Missing required environment variables:', missing);
-    throw new Error(`Missing required environment variables: ${missing.join(', ')}`);
+  if (missing.length > 0 || empty.length > 0) {
+    const issues = [];
+    if (missing.length > 0) {
+      issues.push(`Missing: ${missing.join(', ')}`);
+    }
+    if (empty.length > 0) {
+      issues.push(`Empty: ${empty.join(', ')}`);
+    }
+    
+    logger.error(`Environment validation failed. ${issues.join('; ')}`);
+    
+    // Provide helpful guidance for SUPABASE_JWT_SECRET
+    if (missing.includes('SUPABASE_JWT_SECRET') || empty.includes('SUPABASE_JWT_SECRET')) {
+      logger.error('SUPABASE_JWT_SECRET is required for Supabase authentication.');
+      logger.error('To get this value:');
+      logger.error('1. Go to your Supabase project dashboard');
+      logger.error('2. Navigate to Settings > API');
+      logger.error('3. Copy the JWT Secret value');
+      logger.error('4. Set it as an environment variable named exactly: SUPABASE_JWT_SECRET');
+      logger.error('5. In Northflank: Ensure the secret is named exactly "SUPABASE_JWT_SECRET" (case-sensitive)');
+    }
+    
+    throw new Error(`Missing required environment variables: ${missing.concat(empty).join(', ')}`);
   }
 
   // Validate JWT secrets length
