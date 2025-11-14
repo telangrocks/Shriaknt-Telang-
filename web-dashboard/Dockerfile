@@ -14,6 +14,20 @@ ENV VITE_SUPABASE_URL=${VITE_SUPABASE_URL}
 ENV VITE_SUPABASE_ANON_KEY=${VITE_SUPABASE_ANON_KEY}
 ENV VITE_API_BASE_URL=${VITE_API_BASE_URL}
 
+# Validate that required environment variables are set (after ENV is set)
+# This will fail the build early if variables are missing
+RUN if [ -z "$VITE_SUPABASE_URL" ]; then \
+      echo "ERROR: VITE_SUPABASE_URL is not set!"; \
+      echo "Please set VITE_SUPABASE_URL as a build argument in Northflank Build Settings."; \
+      exit 1; \
+    fi && \
+    if [ -z "$VITE_SUPABASE_ANON_KEY" ]; then \
+      echo "ERROR: VITE_SUPABASE_ANON_KEY is not set!"; \
+      echo "Please set VITE_SUPABASE_ANON_KEY as a build argument in Northflank Build Settings."; \
+      exit 1; \
+    fi && \
+    echo "✓ Build arguments validated: VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY are set"
+
 # Copy dependency manifests first to leverage Docker layer caching
 COPY package.json yarn.lock .yarnrc.yml ./
 
