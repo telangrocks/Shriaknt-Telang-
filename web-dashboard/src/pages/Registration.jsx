@@ -214,10 +214,52 @@ const Registration = ({ setIsAuthenticated }) => {
           code: result.error.code,
           duration: `${duration}ms`
         })
+        
+        // Handle "user already exists" error during signup
+        if (isSignUp && result.error.code === 'user_already_exists') {
+          console.log(`[AUTH_FLOW] [${requestId}] User already exists, switching to sign in mode...`)
+          setIsSignUp(false)
+          showStatus('This account already exists. Please sign in with your password.', 'info')
+          
+          // Automatically try to sign in with the provided credentials
+          try {
+            const signInResult = await supabase.auth.signInWithPassword({
+              email: normalizedEmail,
+              password: password
+            })
+            
+            if (signInResult.error) {
+              throw signInResult.error
+            }
+            
+            if (signInResult.data?.session) {
+              console.log(`[AUTH_FLOW] [${requestId}] Auto sign-in successful after user_already_exists`)
+              showStatus('Signing you in…', 'info')
+              await exchangeSession(signInResult.data.session)
+              showStatus('Sign in successful! Redirecting…', 'success')
+              return
+            }
+          } catch (signInError) {
+            console.error(`[AUTH_FLOW] [${requestId}] Auto sign-in failed:`, {
+              requestId,
+              error: signInError.message,
+              code: signInError.code
+            })
+            // Fall through to show error message below
+            throw new Error('This account already exists. Please sign in with your password.')
+          }
+        }
+        
         throw result.error
       }
 
       if (!result.data?.session) {
+        // For signup, if no session is returned but no error, it might mean email confirmation is required
+        // But since we disabled it, this shouldn't happen. However, let's handle it gracefully
+        if (isSignUp) {
+          console.warn(`[AUTH_FLOW] [${requestId}] Signup succeeded but no session returned. This might indicate email confirmation is enabled in Supabase.`)
+          throw new Error('Account created, but please check your Supabase settings to ensure email confirmation is disabled for instant authentication.')
+        }
         throw new Error('Authentication succeeded but no session was returned.')
       }
 
@@ -246,11 +288,24 @@ const Registration = ({ setIsAuthenticated }) => {
         error: error
       })
       
-      if (error?.response) {
-        showStatus(resolveErrorMessage(error), 'error')
-      } else {
-        showStatus(resolveAuthError(error), 'error')
+      // Handle specific error cases with user-friendly messages
+      let errorMessage = resolveAuthError(error)
+      
+      if (error?.code === 'user_already_exists') {
+        errorMessage = 'This account already exists. Please sign in instead.'
+        // Switch to sign in mode if not already
+        if (isSignUp) {
+          setIsSignUp(false)
+        }
+      } else if (error?.code === 'invalid_credentials' || error?.message?.toLowerCase().includes('invalid login')) {
+        errorMessage = 'Invalid email or password. Please check your credentials and try again.'
+      } else if (error?.code === 'email_not_confirmed') {
+        errorMessage = 'Please check your Supabase settings and disable email confirmation for instant authentication.'
+      } else if (error?.status === 422) {
+        errorMessage = error.message || 'Invalid request. Please check your input and try again.'
       }
+      
+      showStatus(errorMessage, 'error')
     } finally {
       setIsLoading(false)
     }
