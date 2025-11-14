@@ -52,11 +52,46 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response) => response,
   (error) => {
+    // Enhanced error logging
+    if (error.response) {
+      // Server responded with error status
+      console.error('[API_ERROR] Response error:', {
+        status: error.response.status,
+        statusText: error.response.statusText,
+        data: error.response.data,
+        url: error.config?.url,
+        method: error.config?.method,
+        message: error.response.data?.message,
+        error: error.response.data?.error
+      })
+    } else if (error.request) {
+      // Request was made but no response received
+      console.error('[API_ERROR] No response received:', {
+        url: error.config?.url,
+        method: error.config?.method,
+        timeout: error.code === 'ECONNABORTED',
+        networkError: error.message === 'Network Error'
+      })
+    } else {
+      // Error setting up request
+      console.error('[API_ERROR] Request setup error:', {
+        message: error.message,
+        error: error
+      })
+    }
+    
     if (error.response?.status === 401) {
       localStorage.removeItem(AUTH_TOKEN_KEY)
       localStorage.removeItem(REFRESH_TOKEN_KEY)
       window.location.href = '/register'
     }
+    
+    // Enhance error object with useful information
+    if (error.response?.data) {
+      error.backendMessage = error.response.data.message
+      error.backendError = error.response.data.error
+    }
+    
     return Promise.reject(error)
   }
 )

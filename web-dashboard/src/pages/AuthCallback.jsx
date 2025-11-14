@@ -55,21 +55,58 @@ const AuthCallback = ({ setIsAuthenticated }) => {
         const duration = Date.now() - startTime
 
         if (apiError) {
-          console.error(`[SESSION_EXCHANGE] [${exchangeId}] API error:`, {
+          // Comprehensive error extraction
+          const errorDetails = {
             exchangeId,
             message: apiError?.message,
-            response: apiError?.response,
+            name: apiError?.name,
+            code: apiError?.code,
             status: apiError?.response?.status,
             statusText: apiError?.response?.statusText,
+            statusCode: apiError?.response?.status,
+            response: apiError?.response ? {
+              status: apiError.response.status,
+              statusText: apiError.response.statusText,
+              data: apiError.response.data,
+              headers: apiError.response.headers
+            } : undefined,
+            request: apiError?.request ? {
+              method: apiError.request.method,
+              url: apiError.request.url
+            } : undefined,
             data: apiError?.response?.data,
-            duration: `${duration}ms`
-          })
-          throw new Error(
+            backendMessage: apiError?.response?.data?.message,
+            backendError: apiError?.response?.data?.error,
+            duration: `${duration}ms`,
+            timestamp: new Date().toISOString(),
+            allKeys: Object.keys(apiError || {})
+          }
+          
+          console.error(`[SESSION_EXCHANGE] [${exchangeId}] API error - Full details:`, errorDetails)
+          console.error(`[SESSION_EXCHANGE] [${exchangeId}] Error object keys:`, errorDetails.allKeys)
+          
+          // Log backend response if available
+          if (apiError?.response?.data) {
+            console.error(`[SESSION_EXCHANGE] [${exchangeId}] Backend error response:`, {
+              status: apiError.response.status,
+              data: apiError.response.data,
+              message: apiError.response.data?.message,
+              error: apiError.response.data?.error
+            })
+          }
+          
+          // Create error with priority-based message
+          const errorMessage = 
             apiError?.response?.data?.message || 
             apiError?.response?.data?.error || 
             apiError?.message || 
-            'Session exchange failed.'
-          )
+            `Session exchange failed (${apiError?.response?.status || 'unknown status'})`
+          
+          const enhancedError = new Error(errorMessage)
+          enhancedError.originalError = apiError
+          enhancedError.status = apiError?.response?.status
+          enhancedError.responseData = apiError?.response?.data
+          throw enhancedError
         }
 
         if (!apiData?.success || !apiData?.token) {
@@ -217,32 +254,123 @@ const AuthCallback = ({ setIsAuthenticated }) => {
           setMessage('Waiting for Supabase to finalize the magic link…')
         }
       } catch (error) {
-        // Enhanced error logging
+        // Comprehensive error extraction and logging
+        const extractErrorDetails = (err) => {
+          if (!err) return {}
+          
+          const details = {
+            // Basic error properties
+            message: err?.message,
+            name: err?.name,
+            code: err?.code,
+            status: err?.status,
+            statusCode: err?.statusCode,
+            stack: err?.stack,
+            
+            // Axios-specific properties
+            response: err?.response ? {
+              status: err.response.status,
+              statusText: err.response.statusText,
+              data: err.response.data,
+              headers: err.response.headers
+            } : undefined,
+            
+            // Request info (for axios errors)
+            request: err?.request ? {
+              method: err.request.method,
+              url: err.request.url,
+              headers: err.request.headers
+            } : undefined,
+            
+            // Supabase-specific properties
+            error_description: err?.error_description,
+            error_code: err?.error_code,
+            
+            // Generic error object
+            error: err,
+            
+            // All enumerable properties
+            allKeys: Object.keys(err || {}),
+            allProperties: {}
+          }
+          
+          // Try to extract all properties
+          try {
+            for (const key in err) {
+              if (err.hasOwnProperty(key)) {
+                try {
+                  details.allProperties[key] = typeof err[key] === 'object' 
+                    ? JSON.stringify(err[key]) 
+                    : err[key]
+                } catch (e) {
+                  details.allProperties[key] = '[Unable to serialize]'
+                }
+              }
+            }
+          } catch (e) {
+            details.propertyExtractionError = e.message
+          }
+          
+          return details
+        }
+        
         const errorDetails = {
           sessionId,
-          message: error?.message,
-          name: error?.name,
-          code: error?.code,
-          status: error?.status,
-          statusCode: error?.statusCode,
-          stack: error?.stack,
-          error: error,
+          ...extractErrorDetails(error),
           url: window.location.href,
-          hash: window.location.hash
+          hash: window.location.hash,
+          timestamp: new Date().toISOString()
         }
+        
+        // Comprehensive logging
         console.error(`[MAGIC_LINK] [${sessionId}] Magic link verification error - Full details:`, errorDetails)
-        console.error(`[MAGIC_LINK] [${sessionId}] Error object keys:`, Object.keys(error || {}))
+        console.error(`[MAGIC_LINK] [${sessionId}] Error object keys:`, errorDetails.allKeys || [])
+        console.error(`[MAGIC_LINK] [${sessionId}] Error object properties:`, errorDetails.allProperties || {})
+        
+        // Log response data if available (from axios)
+        if (error?.response?.data) {
+          console.error(`[MAGIC_LINK] [${sessionId}] Backend error response:`, {
+            status: error.response.status,
+            data: error.response.data,
+            message: error.response.data?.message,
+            error: error.response.data?.error
+          })
+        }
         
         setIsError(true)
-        // Provide more helpful error message
+        
+        // Provide helpful error message with priority order
         let userMessage = 'Magic link verification failed.'
-        if (error?.message) {
+        
+        // Priority 1: Backend error message (most helpful)
+        if (error?.response?.data?.message) {
+          userMessage = error.response.data.message
+        } else if (error?.response?.data?.error) {
+          userMessage = error.response.data.error
+        }
+        // Priority 2: Axios error message
+        else if (error?.message) {
           userMessage = error.message
-        } else if (error?.error_description) {
+        }
+        // Priority 3: Supabase error description
+        else if (error?.error_description) {
           userMessage = error.error_description
-        } else if (typeof error === 'string') {
+        }
+        // Priority 4: Status-based message
+        else if (error?.response?.status) {
+          if (error.response.status === 500) {
+            userMessage = 'Server error occurred. Please try again or contact support.'
+          } else if (error.response.status === 401) {
+            userMessage = 'Authentication failed. Please request a new magic link.'
+          } else if (error.response.status === 400) {
+            userMessage = 'Invalid request. Please try again.'
+          }
+        }
+        // Priority 5: String error
+        else if (typeof error === 'string') {
           userMessage = error
         }
+        
         setMessage(userMessage)
       }
     }
@@ -268,19 +396,56 @@ const AuthCallback = ({ setIsAuthenticated }) => {
           }
           await exchangeSession(session, eventId)
         } catch (error) {
-          // Enhanced error logging
+          // Enhanced error logging with comprehensive extraction
+          const extractErrorDetails = (err) => {
+            if (!err) return {}
+            return {
+              message: err?.message,
+              name: err?.name,
+              code: err?.code,
+              status: err?.status,
+              statusCode: err?.statusCode,
+              stack: err?.stack,
+              response: err?.response ? {
+                status: err.response.status,
+                data: err.response.data
+              } : undefined,
+              originalError: err?.originalError,
+              responseData: err?.responseData,
+              allKeys: Object.keys(err || {}),
+              error: err
+            }
+          }
+          
           const errorDetails = {
             eventId,
-            message: error?.message,
-            name: error?.name,
-            code: error?.code,
-            status: error?.status,
-            stack: error?.stack,
-            error: error
+            ...extractErrorDetails(error),
+            timestamp: new Date().toISOString()
           }
+          
           console.error(`[AUTH_FLOW] [${eventId}] Auth state exchange error - Full details:`, errorDetails)
+          console.error(`[AUTH_FLOW] [${eventId}] Error object keys:`, errorDetails.allKeys || [])
+          
+          if (error?.response?.data) {
+            console.error(`[AUTH_FLOW] [${eventId}] Backend error response:`, {
+              status: error.response.status,
+              data: error.response.data
+            })
+          }
+          
           setIsError(true)
-          setMessage(error?.message || error?.error_description || 'Magic link verification failed.')
+          
+          // Priority-based error message
+          const userMessage = 
+            error?.responseData?.message ||
+            error?.response?.data?.message ||
+            error?.responseData?.error ||
+            error?.response?.data?.error ||
+            error?.message ||
+            error?.error_description ||
+            'Magic link verification failed.'
+          
+          setMessage(userMessage)
         }
       } else if (event === 'TOKEN_REFRESHED') {
         console.log(`[AUTH_FLOW] [${eventId}] Token refreshed successfully`)

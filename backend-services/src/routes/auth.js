@@ -380,20 +380,43 @@ router.post('/supabase-login', async (req, res) => {
       }
     })
   } catch (error) {
-    // Catch-all for any unexpected errors
+    // Catch-all for any unexpected errors with comprehensive logging
     const duration = Date.now() - startTime
-    logger.error(`[BACKEND_ERROR] [${requestId}] Unexpected error during Supabase login:`, {
+    
+    // Extract all possible error information
+    const errorInfo = {
       requestId,
       error: error.message,
       name: error.name,
       code: error.code,
       stack: error.stack,
+      duration: `${duration}ms`,
+      timestamp: new Date().toISOString()
+    }
+    
+    // Add additional error properties if available
+    if (error.sql) errorInfo.sql = error.sql
+    if (error.sqlState) errorInfo.sqlState = error.sqlState
+    if (error.sqlMessage) errorInfo.sqlMessage = error.sqlMessage
+    if (error.errno) errorInfo.errno = error.errno
+    if (error.syscall) errorInfo.syscall = error.syscall
+    if (error.address) errorInfo.address = error.address
+    if (error.port) errorInfo.port = error.port
+    
+    // Log full error details
+    logger.error(`[BACKEND_ERROR] [${requestId}] Unexpected error during Supabase login:`, {
+      ...errorInfo,
       errorObject: error,
-      duration: `${duration}ms`
+      errorKeys: Object.keys(error || {}),
+      errorString: error.toString()
     })
+    
+    // Return detailed error response (safe for production - no sensitive data)
     res.status(500).json({
       error: 'Internal server error',
-      message: 'Failed to authenticate with Supabase. Please try again or contact support if the issue persists.'
+      message: error.message || 'Failed to authenticate with Supabase. Please try again or contact support if the issue persists.',
+      requestId: requestId, // Include request ID for support
+      timestamp: new Date().toISOString()
     })
   }
 })
