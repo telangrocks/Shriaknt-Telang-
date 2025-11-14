@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   ShieldCheck,
   Loader2,
-  Phone,
+  Mail,
   MessageSquare,
   CheckCircle2,
   ArrowLeft,
@@ -12,10 +12,10 @@ import { supabase } from '../lib/supabaseClient'
 import { api } from '../services/api'
 import { AUTH_TOKEN_KEY, REFRESH_TOKEN_KEY } from '../constants/auth'
 
-const PHONE_REGEX = /^\+\d{8,15}$/
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 const OTP_REGEX = /^\d{4,8}$/
 const STEPS = {
-  PHONE: 'phone',
+  EMAIL: 'email',
   VERIFY: 'verify'
 }
 
@@ -64,33 +64,23 @@ const resolveAuthError = (error) => {
   return 'Authentication failed. Please try again.'
 }
 
-const normalizePhoneNumber = (rawValue) => {
+const normalizeEmail = (rawValue) => {
   if (!rawValue) {
     return ''
   }
-
-  const trimmed = rawValue.replace(/\s+/g, '')
-  if (trimmed.startsWith('+')) {
-    return `+${trimmed.slice(1).replace(/[^\d]/g, '')}`
-  }
-
-  if (trimmed.startsWith('00')) {
-    return `+${trimmed.slice(2).replace(/[^\d]/g, '')}`
-  }
-
-  return `+${trimmed.replace(/[^\d]/g, '')}`
+  return rawValue.trim().toLowerCase()
 }
 
 const Registration = ({ setIsAuthenticated }) => {
-  const [step, setStep] = useState(STEPS.PHONE)
-  const [phone, setPhone] = useState('')
+  const [step, setStep] = useState(STEPS.EMAIL)
+  const [email, setEmail] = useState('')
   const [otp, setOtp] = useState('')
   const [status, setStatus] = useState(null)
   const [isLoading, setIsLoading] = useState(false)
   const [resendTimer, setResendTimer] = useState(0)
 
-  const normalizedPhone = useMemo(() => normalizePhoneNumber(phone), [phone])
-  const phoneIsValid = useMemo(() => PHONE_REGEX.test(normalizedPhone), [normalizedPhone])
+  const normalizedEmail = useMemo(() => normalizeEmail(email), [email])
+  const emailIsValid = useMemo(() => EMAIL_REGEX.test(normalizedEmail), [normalizedEmail])
   const otpIsValid = useMemo(() => OTP_REGEX.test(otp.trim()), [otp])
 
   useEffect(() => {
@@ -120,8 +110,8 @@ const Registration = ({ setIsAuthenticated }) => {
   }, [])
 
   const handleSendOtp = useCallback(async () => {
-    if (!phoneIsValid) {
-      showStatus('Enter a valid phone number with the country code prefix.', 'error')
+    if (!emailIsValid) {
+      showStatus('Enter a valid email address.', 'error')
       return
     }
 
@@ -130,15 +120,15 @@ const Registration = ({ setIsAuthenticated }) => {
 
     try {
       const { error } = await supabase.auth.signInWithOtp({
-        phone: normalizedPhone,
-        options: { channel: 'sms' }
+        email: normalizedEmail,
+        options: { channel: 'email' }
       })
 
       if (error) {
         throw error
       }
 
-      showStatus('OTP sent successfully. Enter the code to continue.', 'success')
+      showStatus('OTP sent successfully. Check your email and enter the code to continue.', 'success')
       setStep(STEPS.VERIFY)
       setResendTimer(45)
     } catch (error) {
@@ -151,11 +141,11 @@ const Registration = ({ setIsAuthenticated }) => {
     } finally {
       setIsLoading(false)
     }
-  }, [normalizedPhone, phoneIsValid, showStatus])
+  }, [normalizedEmail, emailIsValid, showStatus])
 
   const handleOtpVerification = useCallback(async () => {
     if (!otpIsValid) {
-      showStatus('Enter the verification code sent to your phone.', 'error')
+      showStatus('Enter the verification code sent to your email.', 'error')
       return
     }
 
@@ -164,9 +154,9 @@ const Registration = ({ setIsAuthenticated }) => {
 
     try {
       const { data, error } = await supabase.auth.verifyOtp({
-        phone: normalizedPhone,
+        email: normalizedEmail,
         token: otp.trim(),
-        type: 'sms'
+        type: 'email'
       })
 
       if (error) {
@@ -190,7 +180,7 @@ const Registration = ({ setIsAuthenticated }) => {
       if (apiData?.success && apiData?.token) {
         persistAuthSession(apiData.token, apiData?.refreshToken)
         showStatus(
-          apiData?.message || 'Phone verified. Redirecting you to the dashboard…',
+          apiData?.message || 'Email verified. Redirecting you to the dashboard…',
           'success'
         )
         setIsAuthenticated(true)
@@ -210,10 +200,10 @@ const Registration = ({ setIsAuthenticated }) => {
     } finally {
       setIsLoading(false)
     }
-  }, [normalizedPhone, otp, otpIsValid, persistAuthSession, setIsAuthenticated, showStatus])
+  }, [normalizedEmail, otp, otpIsValid, persistAuthSession, setIsAuthenticated, showStatus])
 
-  const handleBackToPhone = () => {
-    setStep(STEPS.PHONE)
+  const handleBackToEmail = () => {
+    setStep(STEPS.EMAIL)
     setOtp('')
     clearStatus()
   }
@@ -224,9 +214,9 @@ const Registration = ({ setIsAuthenticated }) => {
         <div className="text-center space-y-4">
           <span className="app-pill">Cryptopulse</span>
           <p className="text-muted text-sm uppercase tracking-[0.45em]">
-            Step {step === STEPS.PHONE ? '1' : '2'} of 2 · Secure access to your Cryptopulse account
+            Step {step === STEPS.EMAIL ? '1' : '2'} of 2 · Secure access to your Cryptopulse account
           </p>
-          <h1 className="heading-xl">Register your phone</h1>
+          <h1 className="heading-xl">Register your email</h1>
           <p className="text-base text-muted">
             Multi-factor security powered by Cryptopulse AI keeps your trading operations safe and
             compliant.
@@ -243,38 +233,38 @@ const Registration = ({ setIsAuthenticated }) => {
                 Multi-factor security powered by Cryptopulse AI
               </p>
               <p>
-                We deliver OTP verification instantly to keep your trading operations compliant and
+                We deliver OTP verification via email to keep your trading operations compliant and
                 protected.
               </p>
             </div>
           </div>
 
           <div className="space-y-6">
-            {step === STEPS.PHONE ? (
+            {step === STEPS.EMAIL ? (
               <div className="space-y-4">
-                <label className="text-sm font-medium text-muted uppercase tracking-wide" htmlFor="phone">
-                  Phone number
+                <label className="text-sm font-medium text-muted uppercase tracking-wide" htmlFor="email">
+                  Email address
                 </label>
                 <div
                   className={`flex items-center gap-3 px-5 py-4 rounded-3xl border ${
-                    phoneIsValid ? 'border-accent-400/60 shadow-glow' : 'border-white/8'
+                    emailIsValid ? 'border-accent-400/60 shadow-glow' : 'border-white/8'
                   } bg-ocean-800/70 focus-within:border-accent-400/80 focus-within:shadow-glow transition`}
                 >
-                  <Phone className="h-5 w-5 text-accent-300" />
+                  <Mail className="h-5 w-5 text-accent-300" />
                   <input
-                    type="tel"
-                    inputMode="tel"
-                    autoComplete="tel"
-                    placeholder="+1 555 123 4567"
+                    type="email"
+                    inputMode="email"
+                    autoComplete="email"
+                    placeholder="your.email@example.com"
                     className="w-full bg-transparent outline-none text-accent-100 placeholder:text-muted-500 text-base"
-                    id="phone"
-                    name="phone"
-                    value={phone}
-                    onChange={(event) => setPhone(event.target.value)}
+                    id="email"
+                    name="email"
+                    value={email}
+                    onChange={(event) => setEmail(event.target.value)}
                   />
                 </div>
                 <p className="text-sm text-muted">
-                  OTP will be sent to this number. Include the country code and ensure SMS reception.
+                  OTP will be sent to this email address. Check your inbox and spam folder.
                 </p>
               </div>
             ) : (
@@ -285,16 +275,16 @@ const Registration = ({ setIsAuthenticated }) => {
                       Verify code
                     </span>
                     <p className="text-lg font-semibold text-accent-100">
-                      Enter the 6-digit code sent to {normalizedPhone}
+                      Enter the code sent to {normalizedEmail}
                     </p>
                   </div>
                   <button
                     type="button"
-                    onClick={handleBackToPhone}
+                    onClick={handleBackToEmail}
                     className="inline-flex items-center gap-2 text-sm text-muted hover:text-accent-200 transition"
                   >
                     <ArrowLeft className="h-4 w-4" />
-                    Edit number
+                    Edit email
                   </button>
                 </div>
 
@@ -330,11 +320,11 @@ const Registration = ({ setIsAuthenticated }) => {
             <button
               type="button"
               disabled={isLoading}
-              onClick={step === STEPS.PHONE ? handleSendOtp : handleOtpVerification}
+              onClick={step === STEPS.EMAIL ? handleSendOtp : handleOtpVerification}
               className="w-full inline-flex items-center justify-center gap-2 px-6 py-4 rounded-3xl bg-accent-500 hover:bg-accent-400 disabled:bg-accent-500/60 disabled:cursor-not-allowed text-white font-semibold text-base transition shadow-lg shadow-accent-500/20"
             >
               {isLoading && <Loader2 className="h-5 w-5 animate-spin" />}
-              {step === STEPS.PHONE ? 'Send OTP' : 'Verify & Continue'}
+              {step === STEPS.EMAIL ? 'Send OTP' : 'Verify & Continue'}
             </button>
 
             {status && (
