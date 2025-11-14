@@ -75,19 +75,63 @@ async function getOrCreateUserByEmail(email, supabaseUserId, existingPool) {
 }
 
 async function issueAuthTokens(userId, email) {
-  const token = jwt.sign(
-    { userId, email },
-    process.env.JWT_SECRET,
-    { expiresIn: process.env.JWT_EXPIRES_IN || '24h' }
-  )
+  // Validate required secrets before attempting to sign tokens
+  if (!process.env.JWT_SECRET) {
+    throw new Error('JWT_SECRET is not configured. Cannot issue authentication tokens.')
+  }
 
-  const refreshToken = jwt.sign(
-    { userId, email },
-    process.env.REFRESH_TOKEN_SECRET,
-    { expiresIn: process.env.REFRESH_TOKEN_EXPIRES_IN || '7d' }
-  )
+  if (!process.env.REFRESH_TOKEN_SECRET) {
+    throw new Error('REFRESH_TOKEN_SECRET is not configured. Cannot issue refresh tokens.')
+  }
 
-  await setSession(userId, token, refreshToken)
+  let token, refreshToken
+
+  try {
+    token = jwt.sign(
+      { userId, email },
+      process.env.JWT_SECRET,
+      { expiresIn: process.env.JWT_EXPIRES_IN || '24h' }
+    )
+
+    refreshToken = jwt.sign(
+      { userId, email },
+      process.env.REFRESH_TOKEN_SECRET,
+      { expiresIn: process.env.REFRESH_TOKEN_EXPIRES_IN || '7d' }
+    )
+  } catch (error) {
+    logger.error('Error signing JWT tokens:', {
+      error: error.message,
+      name: error.name,
+      stack: error.stack,
+      userId,
+      email
+    })
+    throw new Error('Failed to generate authentication tokens. JWT signing failed.')
+  }
+
+  // Store session in Redis (non-blocking - log warning if it fails but don't fail the request)
+  try {
+    const sessionStored = await setSession(userId, token, refreshToken)
+    if (!sessionStored) {
+      logger.warn('Failed to store session in Redis, but tokens were issued', {
+        userId,
+        email
+      })
+      // Don't throw - tokens are still valid, just not cached
+    } else {
+      logger.debug('Session stored in Redis successfully', { userId })
+    }
+  } catch (error) {
+    logger.error('Error storing session in Redis:', {
+      error: error.message,
+      name: error.name,
+      stack: error.stack,
+      userId,
+      email
+    })
+    // Don't throw - tokens are still valid, Redis failure shouldn't block authentication
+    // The session will be recreated on next request if needed
+  }
 
   return { token, refreshToken }
 }
@@ -104,20 +148,48 @@ router.post('/supabase-login', async (req, res) => {
     }
 
     if (!SUPABASE_JWT_SECRET) {
+      logger.error('SUPABASE_JWT_SECRET is missing - cannot verify Supabase tokens')
       return res.status(500).json({
         error: 'Authentication not configured',
         message: 'Server is missing SUPABASE_JWT_SECRET configuration.'
       })
     }
 
+    // Validate required environment variables for token issuance
+    if (!process.env.JWT_SECRET) {
+      logger.error('JWT_SECRET is missing - cannot issue authentication tokens')
+      return res.status(500).json({
+        error: 'Server configuration error',
+        message: 'JWT_SECRET is not configured. Cannot issue authentication tokens.'
+      })
+    }
+
+    if (!process.env.REFRESH_TOKEN_SECRET) {
+      logger.error('REFRESH_TOKEN_SECRET is missing - cannot issue refresh tokens')
+      return res.status(500).json({
+        error: 'Server configuration error',
+        message: 'REFRESH_TOKEN_SECRET is not configured. Cannot issue refresh tokens.'
+      })
+    }
+
     let decodedToken
 
     try {
+      logger.info('Verifying Supabase access token...')
       decodedToken = jwt.verify(accessToken, SUPABASE_JWT_SECRET, {
         algorithms: ['HS256']
       })
+      logger.info('Supabase token verified successfully', {
+        userId: decodedToken.sub,
+        email: decodedToken.email
+      })
     } catch (error) {
-      logger.warn('Failed to verify Supabase access token:', error)
+      logger.warn('Failed to verify Supabase access token:', {
+        error: error.message,
+        name: error.name,
+        code: error.code,
+        stack: error.stack
+      })
       return res.status(401).json({
         error: 'Invalid Supabase token',
         message: 'The provided Supabase token is invalid or expired.'
@@ -128,6 +200,10 @@ router.post('/supabase-login', async (req, res) => {
     const supabaseUserId = decodedToken.sub
 
     if (!email) {
+      logger.warn('Supabase token missing email claim', {
+        tokenClaims: Object.keys(decodedToken),
+        sub: decodedToken.sub
+      })
       return res.status(400).json({
         error: 'Missing email',
         message: 'Supabase token does not contain an email claim.'
@@ -135,14 +211,70 @@ router.post('/supabase-login', async (req, res) => {
     }
 
     if (!supabaseUserId) {
+      logger.warn('Supabase token missing subject claim', {
+        tokenClaims: Object.keys(decodedToken),
+        email: decodedToken.email
+      })
       return res.status(400).json({
         error: 'Missing subject',
         message: 'Supabase token does not contain a subject claim.'
       })
     }
 
-    const { userId, isNewUser } = await getOrCreateUserByEmail(email, supabaseUserId)
-    const { token, refreshToken } = await issueAuthTokens(userId, email)
+    // Get or create user in database
+    let userId, isNewUser
+    try {
+      logger.info('Getting or creating user by email', { email, supabaseUserId })
+      const userResult = await getOrCreateUserByEmail(email, supabaseUserId)
+      userId = userResult.userId
+      isNewUser = userResult.isNewUser
+      logger.info('User retrieved/created successfully', { userId, isNewUser })
+    } catch (error) {
+      logger.error('Database error during user lookup/creation:', {
+        error: error.message,
+        name: error.name,
+        code: error.code,
+        stack: error.stack,
+        email,
+        supabaseUserId
+      })
+      return res.status(500).json({
+        error: 'Database error',
+        message: 'Failed to retrieve or create user account. Please try again.'
+      })
+    }
+
+    // Issue authentication tokens
+    let token, refreshToken
+    try {
+      logger.info('Issuing authentication tokens', { userId, email })
+      const tokenResult = await issueAuthTokens(userId, email)
+      token = tokenResult.token
+      refreshToken = tokenResult.refreshToken
+      logger.info('Authentication tokens issued successfully', { userId })
+    } catch (error) {
+      logger.error('Error issuing authentication tokens:', {
+        error: error.message,
+        name: error.name,
+        code: error.code,
+        stack: error.stack,
+        userId,
+        email,
+        hasJwtSecret: !!process.env.JWT_SECRET,
+        hasRefreshTokenSecret: !!process.env.REFRESH_TOKEN_SECRET
+      })
+      return res.status(500).json({
+        error: 'Token issuance error',
+        message: 'Failed to generate authentication tokens. Please try again.'
+      })
+    }
+
+    logger.info('Supabase login successful', {
+      userId,
+      email,
+      isNewUser,
+      supabaseUserId
+    })
 
     res.json({
       success: true,
@@ -157,10 +289,17 @@ router.post('/supabase-login', async (req, res) => {
       }
     })
   } catch (error) {
-    logger.error('Error during Supabase login:', error)
+    // Catch-all for any unexpected errors
+    logger.error('Unexpected error during Supabase login:', {
+      error: error.message,
+      name: error.name,
+      code: error.code,
+      stack: error.stack,
+      errorObject: error
+    })
     res.status(500).json({
       error: 'Internal server error',
-      message: 'Failed to authenticate with Supabase'
+      message: 'Failed to authenticate with Supabase. Please try again or contact support if the issue persists.'
     })
   }
 })
