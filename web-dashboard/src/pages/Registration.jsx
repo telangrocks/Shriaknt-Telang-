@@ -101,29 +101,20 @@ const Registration = ({ setIsAuthenticated }) => {
 
     try {
       const startTime = Date.now()
-      const { data: apiData, error: apiError } = await api.post('/auth/supabase-login', {
+      // Axios returns response.data on success, throws error on failure
+      const response = await api.post('/auth/supabase-login', {
         accessToken: session.access_token
       })
 
       const duration = Date.now() - startTime
-
-      if (apiError) {
-        console.error(`[AUTH_FLOW] [${requestId}] API error:`, {
-          requestId,
-          message: apiError?.message,
-          status: apiError?.response?.status,
-          data: apiError?.response?.data,
-          duration: `${duration}ms`
-        })
-        throw new Error(
-          apiError?.response?.data?.message ||
-          apiError?.response?.data?.error ||
-          apiError?.message ||
-          'Session exchange failed.'
-        )
-      }
+      const apiData = response.data
 
       if (!apiData?.success || !apiData?.token) {
+        console.error(`[AUTH_FLOW] [${requestId}] Invalid API response:`, {
+          requestId,
+          response: apiData,
+          duration: `${duration}ms`
+        })
         throw new Error(
           apiData?.message || apiData?.error || 'Session exchange failed - invalid response.'
         )
@@ -139,14 +130,28 @@ const Registration = ({ setIsAuthenticated }) => {
 
       persistAuthSession(apiData.token, apiData?.refreshToken)
       setIsAuthenticated(true)
-      navigate('/', { replace: true })
+      
+      // Use setTimeout to ensure state updates are processed before navigation
+      setTimeout(() => {
+        navigate('/', { replace: true })
+      }, 100)
     } catch (error) {
       console.error(`[AUTH_FLOW] [${requestId}] Exception:`, {
         requestId,
         message: error?.message,
+        response: error?.response?.data,
+        status: error?.response?.status,
         error: error
       })
-      throw error
+      
+      // Extract error message from axios error response
+      const errorMessage = 
+        error?.response?.data?.message ||
+        error?.response?.data?.error ||
+        error?.message ||
+        'Session exchange failed. Please try again.'
+      
+      throw new Error(errorMessage)
     }
   }, [navigate, setIsAuthenticated, persistAuthSession])
 
@@ -318,7 +323,19 @@ const Registration = ({ setIsAuthenticated }) => {
       // Handle specific error cases with user-friendly messages
       let errorMessage = resolveAuthError(error)
       
-      if (error?.code === 'user_already_exists') {
+      // Check for axios/backend error responses first
+      if (error?.response) {
+        const backendMessage = error.response.data?.message || error.response.data?.error
+        if (backendMessage) {
+          errorMessage = backendMessage
+        } else if (error.response.status === 500) {
+          errorMessage = 'Server error occurred. Please try again. If the problem persists, contact support.'
+        } else if (error.response.status === 401) {
+          errorMessage = 'Authentication failed. Please check your credentials and try again.'
+        } else if (error.response.status === 400) {
+          errorMessage = error.response.data?.message || 'Invalid request. Please check your input.'
+        }
+      } else if (error?.code === 'user_already_exists') {
         errorMessage = 'This account already exists. Please sign in instead.'
         // Switch to sign in mode if not already
         if (isSignUp) {

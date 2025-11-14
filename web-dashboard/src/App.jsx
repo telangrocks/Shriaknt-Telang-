@@ -1,5 +1,5 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import Dashboard from './pages/Dashboard'
 import Registration from './pages/Registration'
 import Splash from './pages/Splash'
@@ -11,15 +11,22 @@ function App() {
   const [showSplash, setShowSplash] = useState(true)
   const [bootstrapping, setBootstrapping] = useState(true)
 
-  useEffect(() => {
+  // Check authentication status
+  const checkAuth = useCallback(() => {
     const token = localStorage.getItem(AUTH_TOKEN_KEY)
     setIsAuthenticated(!!token)
+    return !!token
+  }, [])
+
+  useEffect(() => {
+    checkAuth()
     setBootstrapping(false)
 
     const timer = window.setTimeout(() => {
       setShowSplash(false)
     }, 1500)
 
+    // Listen for storage changes (cross-tab)
     const handleStorage = (event) => {
       if (event.key === AUTH_TOKEN_KEY) {
         setIsAuthenticated(!!event.newValue)
@@ -31,6 +38,18 @@ function App() {
     return () => {
       window.clearTimeout(timer)
       window.removeEventListener('storage', handleStorage)
+    }
+  }, [checkAuth])
+
+  // Enhanced setIsAuthenticated that also checks localStorage
+  const handleSetIsAuthenticated = useCallback((value) => {
+    setIsAuthenticated(value)
+    // Also verify localStorage is in sync
+    if (value) {
+      const token = localStorage.getItem(AUTH_TOKEN_KEY)
+      if (!token) {
+        console.warn('[AUTH] setIsAuthenticated(true) called but no token in localStorage')
+      }
     }
   }, [])
 
@@ -48,7 +67,7 @@ function App() {
             isAuthenticated ? (
               <Navigate to="/" replace />
             ) : (
-              <Registration setIsAuthenticated={setIsAuthenticated} />
+              <Registration setIsAuthenticated={handleSetIsAuthenticated} />
             )
           }
         />
@@ -56,7 +75,7 @@ function App() {
           path="/*"
           element={
             isAuthenticated ? (
-              <Dashboard setIsAuthenticated={setIsAuthenticated} />
+              <Dashboard setIsAuthenticated={handleSetIsAuthenticated} />
             ) : (
               <Navigate to="/register" replace />
             )
