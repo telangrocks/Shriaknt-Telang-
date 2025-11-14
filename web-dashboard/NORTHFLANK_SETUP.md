@@ -1,24 +1,22 @@
 # Northflank Setup Guide for Web Dashboard
 
-## Required Build Arguments
+## Required Configuration
 
-The web dashboard requires the following **build arguments** to be set in Northflank:
+The web dashboard requires the following environment variables to be set in Northflank:
 
 1. **VITE_SUPABASE_URL** - Your Supabase project URL
 2. **VITE_SUPABASE_ANON_KEY** - Your Supabase anon/public key
-3. **VITE_API_BASE_URL** - Your backend API URL
+3. **VITE_API_BASE_URL** - Your backend API URL (optional, for API proxy)
 
-## How to Set Build Arguments in Northflank
+## ⚠️ CRITICAL: Both Build Arguments AND Runtime Environment Variables
 
-### Step 1: Get Your Supabase Credentials
+For Vite applications, you **MUST** set these as **Build Arguments** because Vite embeds them into the JavaScript bundle during the build process. However, it's also recommended to set them as Runtime Environment Variables for consistency.
 
-1. Go to your **Supabase Dashboard**
-2. Navigate to **Settings** → **API**
-3. Copy the following values:
-   - **Project URL** → Use for `VITE_SUPABASE_URL`
-   - **anon/public key** → Use for `VITE_SUPABASE_ANON_KEY`
+## Step-by-Step Northflank Configuration
 
-### Step 2: Configure Build Arguments in Northflank
+### Step 1: Configure Build Arguments (REQUIRED)
+
+Build arguments are **critical** because Vite needs these values during the build process to embed them into the production bundle.
 
 1. **Go to your service** in Northflank
 2. **Navigate to Settings** → **Build Settings** (or **Configuration** → **Build**)
@@ -27,15 +25,30 @@ The web dashboard requires the following **build arguments** to be set in Northf
 
    | Variable Name | Value | Description |
    |--------------|-------|-------------|
-   | `VITE_SUPABASE_URL` | `https://your-project.supabase.co` | Your Supabase project URL |
-   | `VITE_SUPABASE_ANON_KEY` | `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...` | Your Supabase anon/public key |
-   | `VITE_API_BASE_URL` | `https://api.yourdomain.com` | Your backend API URL |
+   | `VITE_SUPABASE_URL` | `https://snkyvhitsqvnqmzbbovj.supabase.co` | Your Supabase project URL |
+   | `VITE_SUPABASE_ANON_KEY` | `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNua3l2aGl0c3F2bnFtemJib3ZqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjI5NDg3MjUsImV4cCI6MjA3ODUyNDcyNX0.a9o4r_YvAzzA5m2Ev0_Q5kT8NwsCgj8eUPDdtM264NI` | Your Supabase anon/public key |
+   | `VITE_API_BASE_URL` | `https://your-api-domain.com` | Your backend API URL (if applicable) |
+
+### Step 2: Configure Runtime Environment Variables (RECOMMENDED)
+
+While build arguments are required, it's also good practice to set these as runtime environment variables for consistency and debugging.
+
+1. **Go to your service** in Northflank
+2. **Navigate to Settings** → **Environment Variables** (or **Configuration** → **Environment**)
+3. **Add the following runtime environment variables:**
+
+   | Variable Name | Value | Description |
+   |--------------|-------|-------------|
+   | `VITE_SUPABASE_URL` | `https://snkyvhitsqvnqmzbbovj.supabase.co` | Your Supabase project URL |
+   | `VITE_SUPABASE_ANON_KEY` | `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNua3l2aGl0c3F2bnFtemJib3ZqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjI5NDg3MjUsImV4cCI6MjA3ODUyNDcyNX0.a9o4r_YvAzzA5m2Ev0_Q5kT8NwsCgj8eUPDdtM264NI` | Your Supabase anon/public key |
+   | `VITE_API_BASE_URL` | `https://your-api-domain.com` | Your backend API URL (if applicable) |
 
 ### Step 3: Save and Rebuild
 
-1. **Save** the build arguments
+1. **Save** both the build arguments and runtime environment variables
 2. **Trigger a new build** or **redeploy** the service
 3. The build should now include these variables in the production bundle
+4. Verify the deployment succeeds without "Missing Supabase configuration" errors
 
 ## Important Notes
 
@@ -98,12 +111,20 @@ After setting up build arguments and rebuilding:
 
 ## Example Configuration
 
-### Northflank Build Arguments
+### Northflank Build Arguments (REQUIRED)
 
 ```
-VITE_SUPABASE_URL=https://abcdefghijklmnop.supabase.co
-VITE_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFiY2RlZmdoaWprbG1ub3AiLCJyb2xlIjoiYW5vbiIsImlhdCI6MTYxNjI5NjAwMCwiZXhwIjoxOTMxODcyMDAwfQ.example
-VITE_API_BASE_URL=https://api.cryptopulse.com
+VITE_SUPABASE_URL=https://snkyvhitsqvnqmzbbovj.supabase.co
+VITE_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNua3l2aGl0c3F2bnFtemJib3ZqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjI5NDg3MjUsImV4cCI6MjA3ODUyNDcyNX0.a9o4r_YvAzzA5m2Ev0_Q5kT8NwsCgj8eUPDdtM264NI
+VITE_API_BASE_URL=https://your-api-domain.com
+```
+
+### Northflank Runtime Environment Variables (RECOMMENDED)
+
+```
+VITE_SUPABASE_URL=https://snkyvhitsqvnqmzbbovj.supabase.co
+VITE_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNua3l2aGl0c3F2bnFtemJib3ZqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjI5NDg3MjUsImV4cCI6MjA3ODUyNDcyNX0.a9o4r_YvAzzA5m2Ev0_Q5kT8NwsCgj8eUPDdtM264NI
+VITE_API_BASE_URL=https://your-api-domain.com
 ```
 
 ### Dockerfile Configuration
