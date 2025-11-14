@@ -1,23 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import {
-  ShieldCheck,
-  Loader2,
-  Mail,
-  MessageSquare,
-  CheckCircle2,
-  ArrowLeft,
-  RotateCcw
-} from 'lucide-react'
+import { ShieldCheck, Loader2, Mail, CheckCircle2 } from 'lucide-react'
 import { supabase } from '../lib/supabaseClient'
-import { api } from '../services/api'
-import { AUTH_TOKEN_KEY, REFRESH_TOKEN_KEY } from '../constants/auth'
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-const OTP_REGEX = /^\d{4,8}$/
-const STEPS = {
-  EMAIL: 'email',
-  VERIFY: 'verify'
-}
 
 const resolveErrorMessage = (error) => {
   if (error?.response) {
@@ -71,28 +56,15 @@ const normalizeEmail = (rawValue) => {
   return rawValue.trim().toLowerCase()
 }
 
-const Registration = ({ setIsAuthenticated }) => {
-  const [step, setStep] = useState(STEPS.EMAIL)
+const Registration = () => {
   const [email, setEmail] = useState('')
-  const [otp, setOtp] = useState('')
+  const [linkSent, setLinkSent] = useState(false)
   const [status, setStatus] = useState(null)
   const [isLoading, setIsLoading] = useState(false)
   const [resendTimer, setResendTimer] = useState(0)
 
   const normalizedEmail = useMemo(() => normalizeEmail(email), [email])
   const emailIsValid = useMemo(() => EMAIL_REGEX.test(normalizedEmail), [normalizedEmail])
-  const otpIsValid = useMemo(() => OTP_REGEX.test(otp.trim()), [otp])
-
-  useEffect(() => {
-    if (step === STEPS.VERIFY && resendTimer > 0) {
-      const interval = window.setInterval(
-        () => setResendTimer((prev) => (prev > 0 ? prev - 1 : 0)),
-        1000
-      )
-      return () => window.clearInterval(interval)
-    }
-    return undefined
-  }, [resendTimer, step])
 
   const showStatus = useCallback((message, type) => {
     setStatus({ message, type })
@@ -100,39 +72,48 @@ const Registration = ({ setIsAuthenticated }) => {
 
   const clearStatus = useCallback(() => setStatus(null), [])
 
-  const persistAuthSession = useCallback((token, refreshToken) => {
-    if (token) {
-      localStorage.setItem(AUTH_TOKEN_KEY, token)
+  useEffect(() => {
+    if (!linkSent || resendTimer === 0) {
+      return undefined
     }
-    if (refreshToken) {
-      localStorage.setItem(REFRESH_TOKEN_KEY, refreshToken)
-    }
-  }, [])
 
-  const handleSendOtp = useCallback(async () => {
+    const interval = window.setInterval(() => {
+      setResendTimer((prev) => (prev > 0 ? prev - 1 : 0))
+    }, 1000)
+
+    return () => window.clearInterval(interval)
+  }, [linkSent, resendTimer])
+
+  const handleSendMagicLink = useCallback(async () => {
     if (!emailIsValid) {
       showStatus('Enter a valid email address.', 'error')
       return
     }
 
     setIsLoading(true)
-    showStatus('Requesting a secure OTP…', 'info')
+    showStatus('Sending magic link…', 'info')
 
     try {
+      const redirectTo = new URL('/auth/callback', window.location.origin).href
       const { error } = await supabase.auth.signInWithOtp({
         email: normalizedEmail,
-        options: { channel: 'email' }
+        options: {
+          emailRedirectTo: redirectTo
+        }
       })
 
       if (error) {
         throw error
       }
 
-      showStatus('OTP sent successfully. Check your email and enter the code to continue.', 'success')
-      setStep(STEPS.VERIFY)
+      setLinkSent(true)
+      showStatus(
+        `Magic link sent successfully! Check your email at ${normalizedEmail} and click the link to continue.`,
+        'success'
+      )
       setResendTimer(45)
     } catch (error) {
-      console.error('OTP request error:', error)
+      console.error('Magic link request error:', error)
       if (error?.response) {
         showStatus(resolveErrorMessage(error), 'error')
       } else {
@@ -143,69 +124,11 @@ const Registration = ({ setIsAuthenticated }) => {
     }
   }, [normalizedEmail, emailIsValid, showStatus])
 
-  const handleOtpVerification = useCallback(async () => {
-    if (!otpIsValid) {
-      showStatus('Enter the verification code sent to your email.', 'error')
-      return
-    }
-
-    setIsLoading(true)
-    showStatus('Verifying your code…', 'info')
-
-    try {
-      const { data, error } = await supabase.auth.verifyOtp({
-        email: normalizedEmail,
-        token: otp.trim(),
-        type: 'email'
-      })
-
-      if (error) {
-        throw error
-      }
-
-      const session = data?.session
-
-      if (!session?.access_token) {
-        throw new Error('Verification failed: no session returned.')
-      }
-
-      const { data: apiData, error: apiError } = await api.post('/auth/supabase-login', {
-        accessToken: session.access_token
-      })
-
-      if (apiError) {
-        throw apiError
-      }
-
-      if (apiData?.success && apiData?.token) {
-        persistAuthSession(apiData.token, apiData?.refreshToken)
-        showStatus(
-          apiData?.message || 'Email verified. Redirecting you to the dashboard…',
-          'success'
-        )
-        setIsAuthenticated(true)
-        setOtp('')
-      } else {
-        throw new Error(
-          apiData?.message || apiData?.error || 'Session exchange failed. Please try again.'
-        )
-      }
-    } catch (error) {
-      console.error('OTP verification error:', error)
-      if (error?.response) {
-        showStatus(resolveErrorMessage(error), 'error')
-      } else {
-        showStatus(resolveAuthError(error), 'error')
-      }
-    } finally {
-      setIsLoading(false)
-    }
-  }, [normalizedEmail, otp, otpIsValid, persistAuthSession, setIsAuthenticated, showStatus])
-
-  const handleBackToEmail = () => {
-    setStep(STEPS.EMAIL)
-    setOtp('')
+  const handleReset = () => {
+    setLinkSent(false)
+    setEmail('')
     clearStatus()
+    setResendTimer(0)
   }
 
   return (
@@ -214,9 +137,11 @@ const Registration = ({ setIsAuthenticated }) => {
         <div className="text-center space-y-4">
           <span className="app-pill">Cryptopulse</span>
           <p className="text-muted text-sm uppercase tracking-[0.45em]">
-            Step {step === STEPS.EMAIL ? '1' : '2'} of 2 · Secure access to your Cryptopulse account
+            Secure access to your Cryptopulse account
           </p>
-          <h1 className="heading-xl">Register your email</h1>
+          <h1 className="heading-xl">
+            {linkSent ? 'Check your email' : 'Register your email'}
+          </h1>
           <p className="text-base text-muted">
             Multi-factor security powered by Cryptopulse AI keeps your trading operations safe and
             compliant.
@@ -233,14 +158,14 @@ const Registration = ({ setIsAuthenticated }) => {
                 Multi-factor security powered by Cryptopulse AI
               </p>
               <p>
-                We deliver OTP verification via email to keep your trading operations compliant and
+                We deliver secure magic link authentication via email to keep your trading operations compliant and
                 protected.
               </p>
             </div>
           </div>
 
           <div className="space-y-6">
-            {step === STEPS.EMAIL ? (
+            {!linkSent ? (
               <div className="space-y-4">
                 <label className="text-sm font-medium text-muted uppercase tracking-wide" htmlFor="email">
                   Email address
@@ -261,71 +186,74 @@ const Registration = ({ setIsAuthenticated }) => {
                     name="email"
                     value={email}
                     onChange={(event) => setEmail(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' && emailIsValid && !isLoading) {
+                        handleSendMagicLink()
+                      }
+                    }}
                   />
                 </div>
                 <p className="text-sm text-muted">
-                  OTP will be sent to this email address. Check your inbox and spam folder.
+                  A secure magic link will be sent to this email address. Check your inbox and spam folder.
                 </p>
               </div>
             ) : (
-              <div className="space-y-4">
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                  <div className="space-y-1">
-                    <span className="text-xs uppercase tracking-[0.45em] text-muted">
-                      Verify code
-                    </span>
-                    <p className="text-lg font-semibold text-accent-100">
-                      Enter the code sent to {normalizedEmail}
-                    </p>
+              <div className="space-y-6">
+                <div className="app-card-soft p-6 space-y-4">
+                  <div className="flex items-start gap-4">
+                    <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-success/15 border border-success/30 text-success flex-shrink-0">
+                      <Mail className="h-6 w-6" />
+                    </div>
+                    <div className="space-y-2 flex-1">
+                      <p className="text-base font-semibold text-accent-100">
+                        Check your email
+                      </p>
+                      <p className="text-sm text-muted">
+                        We&apos;ve sent a magic link to <strong className="text-accent-200">{normalizedEmail}</strong>
+                      </p>
+                      <p className="text-sm text-muted">
+                        Click the link in the email to sign in. The link will expire in 1 hour.
+                      </p>
+                    </div>
                   </div>
-                  <button
-                    type="button"
-                    onClick={handleBackToEmail}
-                    className="inline-flex items-center gap-2 text-sm text-muted hover:text-accent-200 transition"
-                  >
-                    <ArrowLeft className="h-4 w-4" />
-                    Edit email
-                  </button>
                 </div>
 
-                <div className="flex items-center gap-3 px-6 py-5 rounded-3xl border border-white/8 bg-ocean-800/70 focus-within:border-accent-400/60 focus-within:shadow-glow transition">
-                  <MessageSquare className="h-5 w-5 text-accent-300" />
-                  <input
-                    type="tel"
-                    inputMode="numeric"
-                    pattern="[0-9]*"
-                    maxLength={8}
-                    placeholder="••••••"
-                    className="w-full bg-transparent outline-none text-center text-2xl tracking-[0.6em] text-accent-100 placeholder:text-muted-500"
-                    value={otp}
-                    onChange={(event) => setOtp(event.target.value.replace(/[^\d]/g, ''))}
-                  />
-                </div>
-
-                <div className="flex items-center justify-between text-sm text-muted">
-                  <span>Didn&apos;t receive it?</span>
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-muted">Didn&apos;t receive the email?</span>
                   <button
                     type="button"
-                    onClick={handleSendOtp}
+                    onClick={handleSendMagicLink}
                     disabled={isLoading || resendTimer > 0}
                     className="inline-flex items-center gap-2 text-accent-200 hover:text-accent-100 disabled:text-muted-500 disabled:cursor-not-allowed transition"
                   >
-                    <RotateCcw className="h-4 w-4" />
-                    {resendTimer > 0 ? `Resend in ${resendTimer}s` : 'Resend OTP'}
+                    <Loader2
+                      className={`h-4 w-4 ${isLoading ? 'animate-spin' : resendTimer === 0 ? '' : 'text-muted'}`}
+                    />
+                    {resendTimer > 0 ? `Resend in ${resendTimer}s` : 'Resend link'}
                   </button>
                 </div>
+
+                <button
+                  type="button"
+                  onClick={handleReset}
+                  className="w-full inline-flex items-center justify-center gap-2 px-6 py-3 rounded-2xl border border-white/10 hover:border-white/20 bg-ocean-800/50 hover:bg-ocean-800/70 text-accent-200 font-medium text-sm transition"
+                >
+                  Use a different email
+                </button>
               </div>
             )}
 
-            <button
-              type="button"
-              disabled={isLoading}
-              onClick={step === STEPS.EMAIL ? handleSendOtp : handleOtpVerification}
-              className="w-full inline-flex items-center justify-center gap-2 px-6 py-4 rounded-3xl bg-accent-500 hover:bg-accent-400 disabled:bg-accent-500/60 disabled:cursor-not-allowed text-white font-semibold text-base transition shadow-lg shadow-accent-500/20"
-            >
-              {isLoading && <Loader2 className="h-5 w-5 animate-spin" />}
-              {step === STEPS.EMAIL ? 'Send OTP' : 'Verify & Continue'}
-            </button>
+            {!linkSent && (
+              <button
+                type="button"
+                disabled={isLoading || !emailIsValid}
+                onClick={handleSendMagicLink}
+                className="w-full inline-flex items-center justify-center gap-2 px-6 py-4 rounded-3xl bg-accent-500 hover:bg-accent-400 disabled:bg-accent-500/60 disabled:cursor-not-allowed text-white font-semibold text-base transition shadow-lg shadow-accent-500/20"
+              >
+                {isLoading && <Loader2 className="h-5 w-5 animate-spin" />}
+                Send magic link
+              </button>
+            )}
 
             {status && (
               <div

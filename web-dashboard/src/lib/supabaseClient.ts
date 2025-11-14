@@ -30,10 +30,21 @@ if (!supabaseAnonKey) {
   throw new Error(errorMessage)
 }
 
+// Get the current origin for redirect URLs
+const getRedirectUrl = () => {
+  if (typeof window !== 'undefined') {
+    return `${window.location.origin}/auth/callback`
+  }
+  // Fallback for SSR (shouldn't happen in this app, but safe to have)
+  return 'http://localhost:3001/auth/callback'
+}
+
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
     persistSession: true,
-    autoRefreshToken: true
+    autoRefreshToken: true,
+    redirectTo: getRedirectUrl(),
+    detectSessionInUrl: true
   }
 })
 
