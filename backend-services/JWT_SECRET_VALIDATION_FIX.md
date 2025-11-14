@@ -1,7 +1,7 @@
 # JWT Secret Validation and Error Handling Fix
 
 ## Problem
-The application was experiencing 500 errors during magic link verification and session exchange. The root cause was suspected to be related to JWT secret validation or incorrect configuration.
+The application was experiencing 500 errors during authentication and session exchange. The root cause was suspected to be related to JWT secret validation or incorrect configuration.
 
 ## JWT Secret Validation
 

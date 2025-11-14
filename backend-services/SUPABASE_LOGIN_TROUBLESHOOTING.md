@@ -79,8 +79,8 @@ The `/api/auth/supabase-login` endpoint now includes comprehensive error logging
 
 **Solution:**
 1. Verify `SUPABASE_JWT_SECRET` matches the JWT Secret in Supabase Dashboard
-2. Check if the token has expired (magic links expire after 1 hour)
-3. Request a new magic link from the frontend
+2. Check if the token has expired (tokens expire after their configured lifetime)
+3. Sign in again from the frontend
 4. Verify the token is being sent correctly from frontend
 
 ### 5. Token Missing Required Claims

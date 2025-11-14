@@ -163,7 +163,7 @@ Look for:
 ### Issue: Token Expired
 Look for:
 ```
-[MAGIC_LINK] [req_xxx] Supabase token expired
+[AUTH_FLOW] [req_xxx] Supabase token expired
 ```
 
 ### Issue: Missing Environment Variables

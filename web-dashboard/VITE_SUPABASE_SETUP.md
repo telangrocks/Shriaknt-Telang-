@@ -80,11 +80,10 @@ docker build \
 
 3. **Public Values**: The `VITE_SUPABASE_ANON_KEY` is the **anon/public** key, which is safe to expose in the browser. Never use the **service_role** key here.
 
-4. **Email Magic Link Redirect**: For email-based authentication, Supabase must know where to send users after they click the confirmation link.
-   - In the Supabase Dashboard, go to **Authentication → URL Configuration**.
-   - Set **Site URL** to your deployed dashboard URL (e.g., `https://dashboard.yourdomain.com`).
-   - Add `https://dashboard.yourdomain.com/auth/callback` (and the equivalent local URL, e.g., `http://localhost:3001/auth/callback`) to **Redirect URLs**.
-   - The web dashboard automatically passes this `/auth/callback` URL through `supabase.auth.signInWithOtp({ emailRedirectTo: ... })`, so the redirect must be allowed in Supabase.
+4. **Email Confirmation Disabled**: The application uses instant email/password authentication without email confirmation. Ensure email confirmation is disabled in Supabase Dashboard:
+   - Go to **Authentication → Settings** in Supabase Dashboard
+   - Disable "Enable email confirmations" if you want instant authentication
+   - Users will be authenticated immediately after signup
 
 4. **Different from Backend**: These are **different** from the backend environment variables:
    - Backend uses: `SUPABASE_JWT_SECRET` (for verifying tokens)
