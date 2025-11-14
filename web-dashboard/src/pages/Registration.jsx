@@ -151,6 +151,12 @@ const Registration = ({ setIsAuthenticated }) => {
   }, [navigate, setIsAuthenticated, persistAuthSession])
 
   const handleAuth = useCallback(async () => {
+    // Prevent duplicate calls
+    if (isLoading) {
+      console.warn('[AUTH_FLOW] Auth request already in progress, ignoring duplicate call')
+      return
+    }
+    
     const requestId = `auth_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
     
     if (!emailIsValid) {
@@ -253,14 +259,35 @@ const Registration = ({ setIsAuthenticated }) => {
         throw result.error
       }
 
+      // Handle case where signup succeeds but no session is returned (email confirmation might be enabled)
       if (!result.data?.session) {
-        // For signup, if no session is returned but no error, it might mean email confirmation is required
-        // But since we disabled it, this shouldn't happen. However, let's handle it gracefully
         if (isSignUp) {
-          console.warn(`[AUTH_FLOW] [${requestId}] Signup succeeded but no session returned. This might indicate email confirmation is enabled in Supabase.`)
-          throw new Error('Account created, but please check your Supabase settings to ensure email confirmation is disabled for instant authentication.')
+          console.warn(`[AUTH_FLOW] [${requestId}] Signup succeeded but no session returned. Attempting sign in...`)
+          // Try to sign in immediately - user was just created
+          try {
+            const signInResult = await supabase.auth.signInWithPassword({
+              email: normalizedEmail,
+              password: password
+            })
+            
+            if (signInResult.error) {
+              console.error(`[AUTH_FLOW] [${requestId}] Sign-in after signup failed:`, signInResult.error)
+              throw new Error('Account may have been created, but email confirmation might be enabled in Supabase. Please disable email confirmation in Supabase Dashboard → Authentication → Settings.')
+            }
+            
+            if (signInResult.data?.session) {
+              console.log(`[AUTH_FLOW] [${requestId}] Sign-in after signup successful`)
+              result.data.session = signInResult.data.session
+            } else {
+              throw new Error('Account created, but please check your Supabase settings to ensure email confirmation is disabled for instant authentication.')
+            }
+          } catch (signInError) {
+            console.error(`[AUTH_FLOW] [${requestId}] Error during post-signup sign-in:`, signInError)
+            throw signInError
+          }
+        } else {
+          throw new Error('Authentication succeeded but no session was returned.')
         }
-        throw new Error('Authentication succeeded but no session was returned.')
       }
 
       console.log(`[AUTH_FLOW] [${requestId}] Authentication successful:`, {
