@@ -2,14 +2,13 @@
 
 ## Overview
 
-The application now includes comprehensive structured logging with clear prefixes to help debug authentication flows, magic link verification, session exchange, and backend errors.
+The application now includes comprehensive structured logging with clear prefixes to help debug authentication flows, session exchange, and backend errors.
 
 ## Log Prefixes
 
 All logs use structured prefixes to make them easy to filter and identify:
 
-- `[AUTH_FLOW]` - Authentication flow logs (magic link requests, auth state changes)
-- `[MAGIC_LINK]` - Magic link verification logs (token extraction, session establishment)
+- `[AUTH_FLOW]` - Authentication flow logs (signup, signin, auth state changes)
 - `[SESSION_EXCHANGE]` - Session exchange logs (backend API calls, token issuance)
 - `[BACKEND_ERROR]` - Backend error logs (database errors, token issuance failures)
 - `[HTTP_REQUEST]` - HTTP request logs (incoming requests)
@@ -20,10 +19,8 @@ All logs use structured prefixes to make them easy to filter and identify:
 Each request/operation gets a unique ID that allows you to trace the entire flow:
 
 - Backend requests: `req_<timestamp>_<random>`
-- Frontend sessions: `session_<timestamp>_<random>`
-- Frontend exchanges: `exchange_<timestamp>_<random>`
+- Frontend auth operations: `auth_<timestamp>_<random>`
 - Frontend events: `event_<timestamp>_<random>`
-- Magic link requests: `magic_link_req_<timestamp>_<random>`
 
 ## Backend Logs
 
@@ -51,10 +48,10 @@ Each request/operation gets a unique ID that allows you to trace the entire flow
 [AUTH_FLOW] [req_1234567890_abc123] Supabase login successful { duration: "45ms" }
 ```
 
-### Magic Link Verification Logs
+### Token Verification Logs
 ```
-[MAGIC_LINK] [req_1234567890_abc123] Starting Supabase token verification
-[MAGIC_LINK] [req_1234567890_abc123] Supabase token verified successfully
+[AUTH_FLOW] [req_1234567890_abc123] Starting Supabase token verification
+[AUTH_FLOW] [req_1234567890_abc123] Supabase token verified successfully
 ```
 
 ### Session Exchange Logs
@@ -72,18 +69,10 @@ Each request/operation gets a unique ID that allows you to trace the entire flow
 
 ## Frontend Logs (Browser Console)
 
-### Magic Link Request
+### Sign Up / Sign In
 ```
-[AUTH_FLOW] [magic_link_req_1234567890_abc123] Requesting magic link: { email, redirectTo, ... }
-[AUTH_FLOW] [magic_link_req_1234567890_abc123] Magic link sent successfully
-```
-
-### Magic Link Verification
-```
-[MAGIC_LINK] [session_1234567890_abc123] AuthCallback - Current URL: { href, hash, ... }
-[MAGIC_LINK] [session_1234567890_abc123] Magic link tokens found in URL hash
-[MAGIC_LINK] [session_1234567890_abc123] Setting Supabase session...
-[MAGIC_LINK] [session_1234567890_abc123] Session established successfully
+[AUTH_FLOW] [auth_1234567890_abc123] Signing up user: { email, ... }
+[AUTH_FLOW] [auth_1234567890_abc123] Authentication successful: { userId, email, ... }
 ```
 
 ### Session Exchange
@@ -117,30 +106,24 @@ Search for that ID in your logs to see the entire flow:
 
 ### 4. Trace a Complete Flow
 
-**Example: Magic Link Authentication**
+**Example: Email/Password Authentication**
 
-1. User requests magic link:
+1. User signs up or signs in:
    ```
-   [AUTH_FLOW] [magic_link_req_123] Requesting magic link
-   [AUTH_FLOW] [magic_link_req_123] Magic link sent successfully
-   ```
-
-2. User clicks magic link:
-   ```
-   [MAGIC_LINK] [session_456] Magic link tokens found in URL hash
-   [MAGIC_LINK] [session_456] Session established successfully
+   [AUTH_FLOW] [auth_123] Signing up user: { email, ... }
+   [AUTH_FLOW] [auth_123] Authentication successful: { userId, email, ... }
    ```
 
-3. Session exchange:
+2. Session exchange:
    ```
-   [SESSION_EXCHANGE] [exchange_456] Starting session exchange...
+   [SESSION_EXCHANGE] [auth_123] Starting session exchange...
    [HTTP_REQUEST] [req_789] POST /api/auth/supabase-login
    [AUTH_FLOW] [req_789] Session exchange request received
-   [MAGIC_LINK] [req_789] Supabase token verified successfully
+   [AUTH_FLOW] [req_789] Supabase token verified successfully
    [SESSION_EXCHANGE] [req_789] Authentication tokens issued successfully
    [AUTH_FLOW] [req_789] Supabase login successful
    [HTTP_RESPONSE] [req_789] POST /api/auth/supabase-login - 200
-   [SESSION_EXCHANGE] [exchange_456] Success, storing tokens...
+   [SESSION_EXCHANGE] [auth_123] Success, storing tokens...
    ```
 
 ## Log Locations
@@ -170,11 +153,11 @@ Look for:
 [BACKEND_ERROR] [req_xxx] Database error during user lookup/creation
 ```
 
-### Issue: Magic Link Verification Fails
+### Issue: Authentication Fails
 Look for:
 ```
-[MAGIC_LINK] [session_xxx] setSession error
-[MAGIC_LINK] [req_xxx] JWT signature verification failed
+[AUTH_FLOW] [auth_xxx] Authentication failed
+[AUTH_FLOW] [req_xxx] JWT signature verification failed
 ```
 
 ### Issue: Token Expired

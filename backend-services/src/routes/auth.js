@@ -210,7 +210,7 @@ router.post('/supabase-login', async (req, res) => {
     let decodedToken
 
     try {
-      logger.info(`[MAGIC_LINK] [${requestId}] Starting Supabase token verification`, {
+      logger.info(`[AUTH_FLOW] [${requestId}] Starting Supabase token verification`, {
         requestId,
         secretLength: SUPABASE_JWT_SECRET.length,
         tokenLength: accessToken.length
@@ -220,7 +220,7 @@ router.post('/supabase-login', async (req, res) => {
         algorithms: ['HS256']
       })
       
-      logger.info(`[MAGIC_LINK] [${requestId}] Supabase token verified successfully`, {
+      logger.info(`[AUTH_FLOW] [${requestId}] Supabase token verified successfully`, {
         requestId,
         supabaseUserId: decodedToken.sub,
         email: decodedToken.email,
@@ -241,26 +241,26 @@ router.post('/supabase-login', async (req, res) => {
       // Add specific error information based on error type
       if (error.name === 'JsonWebTokenError') {
         errorDetails.hint = 'Token signature verification failed. Check if SUPABASE_JWT_SECRET matches Supabase project settings.'
-        logger.error(`[MAGIC_LINK] [${requestId}] JWT signature verification failed:`, {
+        logger.error(`[AUTH_FLOW] [${requestId}] JWT signature verification failed:`, {
           ...errorDetails,
           secretLength: SUPABASE_JWT_SECRET.length,
           secretPrefix: SUPABASE_JWT_SECRET.substring(0, 10) + '...'
         })
       } else if (error.name === 'TokenExpiredError') {
-        errorDetails.hint = 'Token has expired. Request a new magic link.'
-        logger.warn(`[MAGIC_LINK] [${requestId}] Supabase token expired:`, errorDetails)
+        errorDetails.hint = 'Token has expired. Please sign in again.'
+        logger.warn(`[AUTH_FLOW] [${requestId}] Supabase token expired:`, errorDetails)
       } else if (error.name === 'NotBeforeError') {
         errorDetails.hint = 'Token is not yet valid.'
-        logger.warn(`[MAGIC_LINK] [${requestId}] Supabase token not yet valid:`, errorDetails)
+        logger.warn(`[AUTH_FLOW] [${requestId}] Supabase token not yet valid:`, errorDetails)
       } else {
-        logger.error(`[MAGIC_LINK] [${requestId}] Unexpected JWT verification error:`, errorDetails)
+        logger.error(`[AUTH_FLOW] [${requestId}] Unexpected JWT verification error:`, errorDetails)
       }
       
       return res.status(401).json({
         error: 'Invalid Supabase token',
         message: error.name === 'TokenExpiredError' 
-          ? 'The magic link has expired. Please request a new one.'
-          : 'The provided Supabase token is invalid or expired.'
+          ? 'Your session has expired. Please sign in again.'
+          : 'The provided authentication token is invalid or expired.'
       })
     }
 

@@ -3,7 +3,6 @@ import { useState, useEffect } from 'react'
 import Dashboard from './pages/Dashboard'
 import Registration from './pages/Registration'
 import Splash from './pages/Splash'
-import AuthCallback from './pages/AuthCallback'
 import './App.css'
 import { AUTH_TOKEN_KEY } from './constants/auth'
 
@@ -49,13 +48,9 @@ function App() {
             isAuthenticated ? (
               <Navigate to="/" replace />
             ) : (
-              <Registration />
+              <Registration setIsAuthenticated={setIsAuthenticated} />
             )
           }
-        />
-        <Route
-          path="/auth/callback"
-          element={<AuthCallback setIsAuthenticated={setIsAuthenticated} />}
         />
         <Route
           path="/*"

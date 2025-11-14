@@ -1,8 +1,12 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
-import { ShieldCheck, Loader2, Mail, CheckCircle2 } from 'lucide-react'
+import { useCallback, useMemo, useState } from 'react'
+import { ShieldCheck, Loader2, Mail, Lock, CheckCircle2 } from 'lucide-react'
 import { supabase } from '../lib/supabaseClient'
+import { api } from '../services/api'
+import { AUTH_TOKEN_KEY, REFRESH_TOKEN_KEY } from '../constants/auth'
+import { useNavigate } from 'react-router-dom'
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+const MIN_PASSWORD_LENGTH = 8
 
 const resolveErrorMessage = (error) => {
   if (error?.response) {
@@ -56,15 +60,17 @@ const normalizeEmail = (rawValue) => {
   return rawValue.trim().toLowerCase()
 }
 
-const Registration = () => {
+const Registration = ({ setIsAuthenticated }) => {
   const [email, setEmail] = useState('')
-  const [linkSent, setLinkSent] = useState(false)
+  const [password, setPassword] = useState('')
   const [status, setStatus] = useState(null)
   const [isLoading, setIsLoading] = useState(false)
-  const [resendTimer, setResendTimer] = useState(0)
+  const [isSignUp, setIsSignUp] = useState(true) // Toggle between signup and login
+  const navigate = useNavigate()
 
   const normalizedEmail = useMemo(() => normalizeEmail(email), [email])
   const emailIsValid = useMemo(() => EMAIL_REGEX.test(normalizedEmail), [normalizedEmail])
+  const passwordIsValid = useMemo(() => password.length >= MIN_PASSWORD_LENGTH, [password])
 
   const showStatus = useCallback((message, type) => {
     setStatus({ message, type })
@@ -72,20 +78,80 @@ const Registration = () => {
 
   const clearStatus = useCallback(() => setStatus(null), [])
 
-  useEffect(() => {
-    if (!linkSent || resendTimer === 0) {
-      return undefined
+  const persistAuthSession = useCallback((token, refreshToken) => {
+    if (token) {
+      localStorage.setItem(AUTH_TOKEN_KEY, token)
+    }
+    if (refreshToken) {
+      localStorage.setItem(REFRESH_TOKEN_KEY, refreshToken)
+    }
+  }, [])
+
+  const exchangeSession = useCallback(async (session) => {
+    if (!session?.access_token) {
+      throw new Error('Supabase did not return a valid session.')
     }
 
-    const interval = window.setInterval(() => {
-      setResendTimer((prev) => (prev > 0 ? prev - 1 : 0))
-    }, 1000)
+    const requestId = `auth_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+    console.log(`[AUTH_FLOW] [${requestId}] Starting session exchange...`, {
+      requestId,
+      userId: session.user?.id,
+      email: session.user?.email
+    })
 
-    return () => window.clearInterval(interval)
-  }, [linkSent, resendTimer])
+    try {
+      const startTime = Date.now()
+      const { data: apiData, error: apiError } = await api.post('/auth/supabase-login', {
+        accessToken: session.access_token
+      })
 
-  const handleSendMagicLink = useCallback(async () => {
-    const requestId = `magic_link_req_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+      const duration = Date.now() - startTime
+
+      if (apiError) {
+        console.error(`[AUTH_FLOW] [${requestId}] API error:`, {
+          requestId,
+          message: apiError?.message,
+          status: apiError?.response?.status,
+          data: apiError?.response?.data,
+          duration: `${duration}ms`
+        })
+        throw new Error(
+          apiError?.response?.data?.message ||
+          apiError?.response?.data?.error ||
+          apiError?.message ||
+          'Session exchange failed.'
+        )
+      }
+
+      if (!apiData?.success || !apiData?.token) {
+        throw new Error(
+          apiData?.message || apiData?.error || 'Session exchange failed - invalid response.'
+        )
+      }
+
+      console.log(`[AUTH_FLOW] [${requestId}] Success, storing tokens...`, {
+        requestId,
+        hasToken: !!apiData.token,
+        userId: apiData.user?.id,
+        isNewUser: apiData.user?.isNewUser,
+        duration: `${duration}ms`
+      })
+
+      persistAuthSession(apiData.token, apiData?.refreshToken)
+      setIsAuthenticated(true)
+      navigate('/', { replace: true })
+    } catch (error) {
+      console.error(`[AUTH_FLOW] [${requestId}] Exception:`, {
+        requestId,
+        message: error?.message,
+        error: error
+      })
+      throw error
+    }
+  }, [navigate, setIsAuthenticated, persistAuthSession])
+
+  const handleAuth = useCallback(async () => {
+    const requestId = `auth_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
     
     if (!emailIsValid) {
       console.warn(`[AUTH_FLOW] [${requestId}] Invalid email format:`, { requestId, email: normalizedEmail })
@@ -93,55 +159,85 @@ const Registration = () => {
       return
     }
 
+    if (!passwordIsValid) {
+      showStatus(`Password must be at least ${MIN_PASSWORD_LENGTH} characters long.`, 'error')
+      return
+    }
+
     setIsLoading(true)
-    showStatus('Sending magic link…', 'info')
+    showStatus(isSignUp ? 'Creating your account…' : 'Signing you in…', 'info')
 
     try {
-      const redirectTo = new URL('/auth/callback', window.location.origin).href
-      console.log(`[AUTH_FLOW] [${requestId}] Requesting magic link:`, {
-        requestId,
-        email: normalizedEmail,
-        redirectTo,
-        timestamp: new Date().toISOString()
-      })
-      
       const startTime = Date.now()
-      const { error } = await supabase.auth.signInWithOtp({
-        email: normalizedEmail,
-        options: {
-          emailRedirectTo: redirectTo
-        }
-      })
+      let result
+
+      if (isSignUp) {
+        console.log(`[AUTH_FLOW] [${requestId}] Signing up user:`, {
+          requestId,
+          email: normalizedEmail,
+          timestamp: new Date().toISOString()
+        })
+
+        // Sign up with email and password (no email confirmation required)
+        result = await supabase.auth.signUp({
+          email: normalizedEmail,
+          password: password,
+          options: {
+            emailRedirectTo: undefined, // No email confirmation
+            data: {
+              email: normalizedEmail
+            }
+          }
+        })
+      } else {
+        console.log(`[AUTH_FLOW] [${requestId}] Signing in user:`, {
+          requestId,
+          email: normalizedEmail,
+          timestamp: new Date().toISOString()
+        })
+
+        // Sign in with email and password
+        result = await supabase.auth.signInWithPassword({
+          email: normalizedEmail,
+          password: password
+        })
+      }
 
       const duration = Date.now() - startTime
 
-      if (error) {
-        console.error(`[AUTH_FLOW] [${requestId}] Magic link request failed:`, {
+      if (result.error) {
+        console.error(`[AUTH_FLOW] [${requestId}] Authentication failed:`, {
           requestId,
-          error: error.message,
-          name: error.name,
-          status: error.status,
-          code: error.code,
+          error: result.error.message,
+          name: result.error.name,
+          status: result.error.status,
+          code: result.error.code,
           duration: `${duration}ms`
         })
-        throw error
+        throw result.error
       }
 
-      console.log(`[AUTH_FLOW] [${requestId}] Magic link sent successfully:`, {
+      if (!result.data?.session) {
+        throw new Error('Authentication succeeded but no session was returned.')
+      }
+
+      console.log(`[AUTH_FLOW] [${requestId}] Authentication successful:`, {
         requestId,
-        email: normalizedEmail,
-        redirectTo,
+        userId: result.data.session.user?.id,
+        email: result.data.session.user?.email,
         duration: `${duration}ms`
       })
 
-      setLinkSent(true)
+      // Exchange Supabase session for application tokens
+      showStatus('Finalizing authentication…', 'info')
+      await exchangeSession(result.data.session)
+
       showStatus(
-        `Magic link sent successfully! Check your email at ${normalizedEmail} and click the link to continue.`,
+        isSignUp ? 'Account created successfully! Redirecting…' : 'Sign in successful! Redirecting…',
         'success'
       )
-      setResendTimer(45)
     } catch (error) {
-      console.error(`[AUTH_FLOW] [${requestId}] Magic link request error:`, {
+      console.error(`[AUTH_FLOW] [${requestId}] Authentication error:`, {
         requestId,
         error: error.message,
         name: error.name,
@@ -149,6 +245,7 @@ const Registration = () => {
         code: error.code,
         error: error
       })
+      
       if (error?.response) {
         showStatus(resolveErrorMessage(error), 'error')
       } else {
@@ -157,14 +254,7 @@ const Registration = () => {
     } finally {
       setIsLoading(false)
     }
-  }, [normalizedEmail, emailIsValid, showStatus])
-
-  const handleReset = () => {
-    setLinkSent(false)
-    setEmail('')
-    clearStatus()
-    setResendTimer(0)
-  }
+  }, [normalizedEmail, emailIsValid, password, passwordIsValid, isSignUp, showStatus, exchangeSession])
 
   return (
     <div className="min-h-screen flex items-center justify-center px-4 py-16">
@@ -175,7 +265,7 @@ const Registration = () => {
             Secure access to your Cryptopulse account
           </p>
           <h1 className="heading-xl">
-            {linkSent ? 'Check your email' : 'Register your email'}
+            {isSignUp ? 'Create your account' : 'Sign in to your account'}
           </h1>
           <p className="text-base text-muted">
             Multi-factor security powered by Cryptopulse AI keeps your trading operations safe and
@@ -193,102 +283,105 @@ const Registration = () => {
                 Multi-factor security powered by Cryptopulse AI
               </p>
               <p>
-                We deliver secure magic link authentication via email to keep your trading operations compliant and
-                protected.
+                Secure authentication keeps your trading operations compliant and protected.
               </p>
             </div>
           </div>
 
           <div className="space-y-6">
-            {!linkSent ? (
-              <div className="space-y-4">
-                <label className="text-sm font-medium text-muted uppercase tracking-wide" htmlFor="email">
-                  Email address
-                </label>
-                <div
-                  className={`flex items-center gap-3 px-5 py-4 rounded-3xl border ${
-                    emailIsValid ? 'border-accent-400/60 shadow-glow' : 'border-white/8'
-                  } bg-ocean-800/70 focus-within:border-accent-400/80 focus-within:shadow-glow transition`}
-                >
-                  <Mail className="h-5 w-5 text-accent-300" />
-                  <input
-                    type="email"
-                    inputMode="email"
-                    autoComplete="email"
-                    placeholder="your.email@example.com"
-                    className="w-full bg-transparent outline-none text-accent-100 placeholder:text-muted-500 text-base"
-                    id="email"
-                    name="email"
-                    value={email}
-                    onChange={(event) => setEmail(event.target.value)}
-                    onKeyDown={(event) => {
-                      if (event.key === 'Enter' && emailIsValid && !isLoading) {
-                        handleSendMagicLink()
-                      }
-                    }}
-                  />
-                </div>
+            <div className="space-y-4">
+              <label className="text-sm font-medium text-muted uppercase tracking-wide" htmlFor="email">
+                Email address
+              </label>
+              <div
+                className={`flex items-center gap-3 px-5 py-4 rounded-3xl border ${
+                  emailIsValid ? 'border-accent-400/60 shadow-glow' : 'border-white/8'
+                } bg-ocean-800/70 focus-within:border-accent-400/80 focus-within:shadow-glow transition`}
+              >
+                <Mail className="h-5 w-5 text-accent-300" />
+                <input
+                  type="email"
+                  inputMode="email"
+                  autoComplete="email"
+                  placeholder="your.email@example.com"
+                  className="w-full bg-transparent outline-none text-accent-100 placeholder:text-muted-500 text-base"
+                  id="email"
+                  name="email"
+                  value={email}
+                  onChange={(event) => {
+                    setEmail(event.target.value)
+                    clearStatus()
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' && emailIsValid && passwordIsValid && !isLoading) {
+                      handleAuth()
+                    }
+                  }}
+                />
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <label className="text-sm font-medium text-muted uppercase tracking-wide" htmlFor="password">
+                Password
+              </label>
+              <div
+                className={`flex items-center gap-3 px-5 py-4 rounded-3xl border ${
+                  passwordIsValid ? 'border-accent-400/60 shadow-glow' : 'border-white/8'
+                } bg-ocean-800/70 focus-within:border-accent-400/80 focus-within:shadow-glow transition`}
+              >
+                <Lock className="h-5 w-5 text-accent-300" />
+                <input
+                  type="password"
+                  autoComplete={isSignUp ? 'new-password' : 'current-password'}
+                  placeholder={isSignUp ? 'Create a password (min. 8 characters)' : 'Enter your password'}
+                  className="w-full bg-transparent outline-none text-accent-100 placeholder:text-muted-500 text-base"
+                  id="password"
+                  name="password"
+                  value={password}
+                  onChange={(event) => {
+                    setPassword(event.target.value)
+                    clearStatus()
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' && emailIsValid && passwordIsValid && !isLoading) {
+                      handleAuth()
+                    }
+                  }}
+                />
+              </div>
+              {isSignUp && (
                 <p className="text-sm text-muted">
-                  A secure magic link will be sent to this email address. Check your inbox and spam folder.
+                  Password must be at least {MIN_PASSWORD_LENGTH} characters long.
                 </p>
-              </div>
-            ) : (
-              <div className="space-y-6">
-                <div className="app-card-soft p-6 space-y-4">
-                  <div className="flex items-start gap-4">
-                    <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-success/15 border border-success/30 text-success flex-shrink-0">
-                      <Mail className="h-6 w-6" />
-                    </div>
-                    <div className="space-y-2 flex-1">
-                      <p className="text-base font-semibold text-accent-100">
-                        Check your email
-                      </p>
-                      <p className="text-sm text-muted">
-                        We&apos;ve sent a magic link to <strong className="text-accent-200">{normalizedEmail}</strong>
-                      </p>
-                      <p className="text-sm text-muted">
-                        Click the link in the email to sign in. The link will expire in 1 hour.
-                      </p>
-                    </div>
-                  </div>
-                </div>
+              )}
+            </div>
 
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-muted">Didn&apos;t receive the email?</span>
-                  <button
-                    type="button"
-                    onClick={handleSendMagicLink}
-                    disabled={isLoading || resendTimer > 0}
-                    className="inline-flex items-center gap-2 text-accent-200 hover:text-accent-100 disabled:text-muted-500 disabled:cursor-not-allowed transition"
-                  >
-                    <Loader2
-                      className={`h-4 w-4 ${isLoading ? 'animate-spin' : resendTimer === 0 ? '' : 'text-muted'}`}
-                    />
-                    {resendTimer > 0 ? `Resend in ${resendTimer}s` : 'Resend link'}
-                  </button>
-                </div>
+            <button
+              type="button"
+              disabled={isLoading || !emailIsValid || !passwordIsValid}
+              onClick={handleAuth}
+              className="w-full inline-flex items-center justify-center gap-2 px-6 py-4 rounded-3xl bg-accent-500 hover:bg-accent-400 disabled:bg-accent-500/60 disabled:cursor-not-allowed text-white font-semibold text-base transition shadow-lg shadow-accent-500/20"
+            >
+              {isLoading && <Loader2 className="h-5 w-5 animate-spin" />}
+              {isSignUp ? 'Create account' : 'Sign in'}
+            </button>
 
-                <button
-                  type="button"
-                  onClick={handleReset}
-                  className="w-full inline-flex items-center justify-center gap-2 px-6 py-3 rounded-2xl border border-white/10 hover:border-white/20 bg-ocean-800/50 hover:bg-ocean-800/70 text-accent-200 font-medium text-sm transition"
-                >
-                  Use a different email
-                </button>
-              </div>
-            )}
-
-            {!linkSent && (
+            <div className="text-center">
               <button
                 type="button"
-                disabled={isLoading || !emailIsValid}
-                onClick={handleSendMagicLink}
-                className="w-full inline-flex items-center justify-center gap-2 px-6 py-4 rounded-3xl bg-accent-500 hover:bg-accent-400 disabled:bg-accent-500/60 disabled:cursor-not-allowed text-white font-semibold text-base transition shadow-lg shadow-accent-500/20"
+                onClick={() => {
+                  setIsSignUp(!isSignUp)
+                  clearStatus()
+                  setPassword('')
+                }}
+                className="text-sm text-accent-200 hover:text-accent-100 transition"
               >
-                {isLoading && <Loader2 className="h-5 w-5 animate-spin" />}
-                Send magic link
+                {isSignUp
+                  ? 'Already have an account? Sign in'
+                  : "Don't have an account? Sign up"}
               </button>
-            )}
+            </div>
 
             {status && (
               <div
