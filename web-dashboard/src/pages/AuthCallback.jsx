@@ -20,9 +20,12 @@ const AuthCallback = ({ setIsAuthenticated }) => {
       }
     }
 
-    const exchangeSession = async (session) => {
+    const exchangeSession = async (session, sessionId) => {
+      const exchangeId = sessionId || `exchange_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+      
       if (!session?.access_token) {
-        console.error('exchangeSession - Invalid session:', {
+        console.error(`[SESSION_EXCHANGE] [${exchangeId}] Invalid session:`, {
+          exchangeId,
           hasSession: !!session,
           hasAccessToken: !!session?.access_token,
           sessionKeys: session ? Object.keys(session) : []
@@ -30,26 +33,36 @@ const AuthCallback = ({ setIsAuthenticated }) => {
         throw new Error('Supabase did not return a valid session.')
       }
 
-      console.log('exchangeSession - Starting session exchange...', {
+      console.log(`[SESSION_EXCHANGE] [${exchangeId}] Starting session exchange...`, {
+        exchangeId,
         hasAccessToken: !!session.access_token,
         hasRefreshToken: !!session.refresh_token,
         userId: session.user?.id,
-        email: session.user?.email
+        email: session.user?.email,
+        tokenLength: session.access_token.length
       })
 
       setMessage('Exchanging Supabase session with Cryptopulse…')
       
       try {
+        const startTime = Date.now()
+        console.log(`[SESSION_EXCHANGE] [${exchangeId}] Calling backend /auth/supabase-login...`)
+        
         const { data: apiData, error: apiError } = await api.post('/auth/supabase-login', {
           accessToken: session.access_token
         })
 
+        const duration = Date.now() - startTime
+
         if (apiError) {
-          console.error('exchangeSession - API error:', {
+          console.error(`[SESSION_EXCHANGE] [${exchangeId}] API error:`, {
+            exchangeId,
             message: apiError?.message,
             response: apiError?.response,
             status: apiError?.response?.status,
-            data: apiError?.response?.data
+            statusText: apiError?.response?.statusText,
+            data: apiError?.response?.data,
+            duration: `${duration}ms`
           })
           throw new Error(
             apiError?.response?.data?.message || 
@@ -60,26 +73,36 @@ const AuthCallback = ({ setIsAuthenticated }) => {
         }
 
         if (!apiData?.success || !apiData?.token) {
-          console.error('exchangeSession - Invalid API response:', {
+          console.error(`[SESSION_EXCHANGE] [${exchangeId}] Invalid API response:`, {
+            exchangeId,
             success: apiData?.success,
             hasToken: !!apiData?.token,
             message: apiData?.message,
             error: apiData?.error,
-            apiData: apiData
+            apiData: apiData,
+            duration: `${duration}ms`
           })
           throw new Error(
             apiData?.message || apiData?.error || 'Session exchange failed - invalid response.'
           )
         }
 
-        console.log('exchangeSession - Success, storing tokens...')
+        console.log(`[SESSION_EXCHANGE] [${exchangeId}] Success, storing tokens...`, {
+          exchangeId,
+          hasToken: !!apiData.token,
+          hasRefreshToken: !!apiData.refreshToken,
+          userId: apiData.user?.id,
+          isNewUser: apiData.user?.isNewUser,
+          duration: `${duration}ms`
+        })
         persistAuthSession(apiData.token, apiData?.refreshToken)
         setIsAuthenticated(true)
         setMessage('Authentication successful. Redirecting to your dashboard…')
         window.location.hash = ''
         setTimeout(() => navigate('/', { replace: true }), 1200)
       } catch (error) {
-        console.error('exchangeSession - Exception:', {
+        console.error(`[SESSION_EXCHANGE] [${exchangeId}] Exception:`, {
+          exchangeId,
           message: error?.message,
           name: error?.name,
           stack: error?.stack,
@@ -90,13 +113,17 @@ const AuthCallback = ({ setIsAuthenticated }) => {
     }
 
     const hydrateSessionFromUrl = async () => {
+      const sessionId = `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+      
       try {
         // Log current URL state for debugging
-        console.log('AuthCallback - Current URL:', {
+        console.log(`[MAGIC_LINK] [${sessionId}] AuthCallback - Current URL:`, {
+          sessionId,
           href: window.location.href,
           hash: window.location.hash,
           pathname: window.location.pathname,
-          search: window.location.search
+          search: window.location.search,
+          timestamp: new Date().toISOString()
         })
 
         // First, check if there are tokens in the URL hash
@@ -111,7 +138,8 @@ const AuthCallback = ({ setIsAuthenticated }) => {
         // Check for error in URL first
         if (errorParam) {
           const errorMsg = errorDescription || errorParam
-          console.error('Magic link error in URL:', {
+          console.error(`[MAGIC_LINK] [${sessionId}] Magic link error in URL:`, {
+            sessionId,
             error: errorParam,
             error_description: errorDescription,
             fullHash: hash
@@ -121,7 +149,8 @@ const AuthCallback = ({ setIsAuthenticated }) => {
 
         // If we have tokens in the URL, set the session explicitly
         if (accessToken && refreshToken) {
-          console.log('Magic link tokens found in URL hash:', {
+          console.log(`[MAGIC_LINK] [${sessionId}] Magic link tokens found in URL hash:`, {
+            sessionId,
             hasAccessToken: !!accessToken,
             hasRefreshToken: !!refreshToken,
             type: type,
@@ -129,13 +158,15 @@ const AuthCallback = ({ setIsAuthenticated }) => {
           })
 
           setMessage('Processing magic link tokens…')
+          console.log(`[MAGIC_LINK] [${sessionId}] Setting Supabase session...`)
           const { data, error } = await supabase.auth.setSession({
             access_token: accessToken,
             refresh_token: refreshToken
           })
 
           if (error) {
-            console.error('setSession error:', {
+            console.error(`[MAGIC_LINK] [${sessionId}] setSession error:`, {
+              sessionId,
               message: error.message,
               status: error.status,
               name: error.name,
@@ -146,10 +177,14 @@ const AuthCallback = ({ setIsAuthenticated }) => {
           }
 
           if (data?.session) {
-            console.log('Session established successfully')
+            console.log(`[MAGIC_LINK] [${sessionId}] Session established successfully`, {
+              sessionId,
+              userId: data.session.user?.id,
+              email: data.session.user?.email
+            })
             // Clear the hash from URL
             window.history.replaceState(null, '', window.location.pathname)
-            await exchangeSession(data.session)
+            await exchangeSession(data.session, sessionId)
             return
           } else {
             throw new Error('setSession succeeded but no session was returned')
@@ -157,10 +192,11 @@ const AuthCallback = ({ setIsAuthenticated }) => {
         }
 
         // Fallback: try to get existing session
-        console.log('No tokens in URL hash, checking for existing session...')
+        console.log(`[MAGIC_LINK] [${sessionId}] No tokens in URL hash, checking for existing session...`)
         const { data, error } = await supabase.auth.getSession()
         if (error) {
-          console.error('getSession error:', {
+          console.error(`[MAGIC_LINK] [${sessionId}] getSession error:`, {
+            sessionId,
             message: error.message,
             status: error.status,
             name: error.name,
@@ -170,15 +206,20 @@ const AuthCallback = ({ setIsAuthenticated }) => {
           throw error
         }
         if (data?.session) {
-          console.log('Existing session found')
-          await exchangeSession(data.session)
+          console.log(`[MAGIC_LINK] [${sessionId}] Existing session found`, {
+            sessionId,
+            userId: data.session.user?.id,
+            email: data.session.user?.email
+          })
+          await exchangeSession(data.session, sessionId)
         } else {
-          console.log('No session found, waiting for auth state change...')
+          console.log(`[MAGIC_LINK] [${sessionId}] No session found, waiting for auth state change...`)
           setMessage('Waiting for Supabase to finalize the magic link…')
         }
       } catch (error) {
         // Enhanced error logging
         const errorDetails = {
+          sessionId,
           message: error?.message,
           name: error?.name,
           code: error?.code,
@@ -189,8 +230,8 @@ const AuthCallback = ({ setIsAuthenticated }) => {
           url: window.location.href,
           hash: window.location.hash
         }
-        console.error('Magic link verification error - Full details:', errorDetails)
-        console.error('Error object keys:', Object.keys(error || {}))
+        console.error(`[MAGIC_LINK] [${sessionId}] Magic link verification error - Full details:`, errorDetails)
+        console.error(`[MAGIC_LINK] [${sessionId}] Error object keys:`, Object.keys(error || {}))
         
         setIsError(true)
         // Provide more helpful error message
@@ -209,19 +250,27 @@ const AuthCallback = ({ setIsAuthenticated }) => {
     hydrateSessionFromUrl()
 
     const { data: listener } = supabase.auth.onAuthStateChange(async (event, session) => {
-      console.log('Auth state change:', { event, hasSession: !!session })
+      const eventId = `event_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+      console.log(`[AUTH_FLOW] [${eventId}] Auth state change:`, {
+        eventId,
+        event,
+        hasSession: !!session,
+        userId: session?.user?.id,
+        email: session?.user?.email
+      })
       
       if (event === 'SIGNED_IN' && session) {
         try {
-          console.log('SIGNED_IN event received, exchanging session...')
+          console.log(`[AUTH_FLOW] [${eventId}] SIGNED_IN event received, exchanging session...`)
           // Clear hash from URL if present
           if (window.location.hash) {
             window.history.replaceState(null, '', window.location.pathname)
           }
-          await exchangeSession(session)
+          await exchangeSession(session, eventId)
         } catch (error) {
           // Enhanced error logging
           const errorDetails = {
+            eventId,
             message: error?.message,
             name: error?.name,
             code: error?.code,
@@ -229,18 +278,18 @@ const AuthCallback = ({ setIsAuthenticated }) => {
             stack: error?.stack,
             error: error
           }
-          console.error('Auth state exchange error - Full details:', errorDetails)
+          console.error(`[AUTH_FLOW] [${eventId}] Auth state exchange error - Full details:`, errorDetails)
           setIsError(true)
           setMessage(error?.message || error?.error_description || 'Magic link verification failed.')
         }
       } else if (event === 'TOKEN_REFRESHED') {
-        console.log('Token refreshed successfully')
+        console.log(`[AUTH_FLOW] [${eventId}] Token refreshed successfully`)
       } else if (event === 'SIGNED_OUT') {
-        console.log('User signed out')
+        console.log(`[AUTH_FLOW] [${eventId}] User signed out`)
       } else if (event === 'USER_UPDATED') {
-        console.log('User updated')
+        console.log(`[AUTH_FLOW] [${eventId}] User updated`)
       } else if (event === 'PASSWORD_RECOVERY') {
-        console.log('Password recovery initiated')
+        console.log(`[AUTH_FLOW] [${eventId}] Password recovery initiated`)
       }
     })
 

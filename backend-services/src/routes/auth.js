@@ -155,18 +155,35 @@ async function issueAuthTokens(userId, email) {
 }
 
 router.post('/supabase-login', async (req, res) => {
+  const requestId = req.requestId || `req_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+  const startTime = Date.now()
+  
+  logger.info(`[AUTH_FLOW] [${requestId}] Session exchange request received`, {
+    requestId,
+    ip: req.ip,
+    userAgent: req.get('user-agent'),
+    timestamp: new Date().toISOString()
+  })
+
   try {
     const { accessToken } = req.body
 
     if (!accessToken) {
+      logger.warn(`[AUTH_FLOW] [${requestId}] Missing accessToken in request body`)
       return res.status(400).json({
         error: 'Missing accessToken',
         message: 'Supabase access token is required'
       })
     }
 
+    logger.info(`[AUTH_FLOW] [${requestId}] Access token received`, {
+      requestId,
+      tokenLength: accessToken.length,
+      tokenPrefix: accessToken.substring(0, 20) + '...'
+    })
+
     if (!SUPABASE_JWT_SECRET) {
-      logger.error('SUPABASE_JWT_SECRET is missing - cannot verify Supabase tokens')
+      logger.error(`[BACKEND_ERROR] [${requestId}] SUPABASE_JWT_SECRET is missing - cannot verify Supabase tokens`)
       return res.status(500).json({
         error: 'Authentication not configured',
         message: 'Server is missing SUPABASE_JWT_SECRET configuration.'
@@ -175,7 +192,7 @@ router.post('/supabase-login', async (req, res) => {
 
     // Validate required environment variables for token issuance
     if (!process.env.JWT_SECRET) {
-      logger.error('JWT_SECRET is missing - cannot issue authentication tokens')
+      logger.error(`[BACKEND_ERROR] [${requestId}] JWT_SECRET is missing - cannot issue authentication tokens`)
       return res.status(500).json({
         error: 'Server configuration error',
         message: 'JWT_SECRET is not configured. Cannot issue authentication tokens.'
@@ -183,7 +200,7 @@ router.post('/supabase-login', async (req, res) => {
     }
 
     if (!process.env.REFRESH_TOKEN_SECRET) {
-      logger.error('REFRESH_TOKEN_SECRET is missing - cannot issue refresh tokens')
+      logger.error(`[BACKEND_ERROR] [${requestId}] REFRESH_TOKEN_SECRET is missing - cannot issue refresh tokens`)
       return res.status(500).json({
         error: 'Server configuration error',
         message: 'REFRESH_TOKEN_SECRET is not configured. Cannot issue refresh tokens.'
@@ -193,25 +210,28 @@ router.post('/supabase-login', async (req, res) => {
     let decodedToken
 
     try {
-      // Log secret info for debugging (without exposing the actual secret)
-      logger.info('Verifying Supabase access token...', {
+      logger.info(`[MAGIC_LINK] [${requestId}] Starting Supabase token verification`, {
+        requestId,
         secretLength: SUPABASE_JWT_SECRET.length,
-        tokenLength: accessToken ? accessToken.length : 0,
-        tokenPrefix: accessToken ? accessToken.substring(0, 20) + '...' : 'missing'
+        tokenLength: accessToken.length
       })
       
       decodedToken = jwt.verify(accessToken, SUPABASE_JWT_SECRET, {
         algorithms: ['HS256']
       })
       
-      logger.info('Supabase token verified successfully', {
-        userId: decodedToken.sub,
+      logger.info(`[MAGIC_LINK] [${requestId}] Supabase token verified successfully`, {
+        requestId,
+        supabaseUserId: decodedToken.sub,
         email: decodedToken.email,
-        tokenClaims: Object.keys(decodedToken)
+        tokenClaims: Object.keys(decodedToken),
+        iat: decodedToken.iat,
+        exp: decodedToken.exp
       })
     } catch (error) {
       // Enhanced error logging for JWT verification failures
       const errorDetails = {
+        requestId,
         error: error.message,
         name: error.name,
         code: error.code,
@@ -221,19 +241,19 @@ router.post('/supabase-login', async (req, res) => {
       // Add specific error information based on error type
       if (error.name === 'JsonWebTokenError') {
         errorDetails.hint = 'Token signature verification failed. Check if SUPABASE_JWT_SECRET matches Supabase project settings.'
-        logger.error('JWT signature verification failed:', {
+        logger.error(`[MAGIC_LINK] [${requestId}] JWT signature verification failed:`, {
           ...errorDetails,
           secretLength: SUPABASE_JWT_SECRET.length,
           secretPrefix: SUPABASE_JWT_SECRET.substring(0, 10) + '...'
         })
       } else if (error.name === 'TokenExpiredError') {
         errorDetails.hint = 'Token has expired. Request a new magic link.'
-        logger.warn('Supabase token expired:', errorDetails)
+        logger.warn(`[MAGIC_LINK] [${requestId}] Supabase token expired:`, errorDetails)
       } else if (error.name === 'NotBeforeError') {
         errorDetails.hint = 'Token is not yet valid.'
-        logger.warn('Supabase token not yet valid:', errorDetails)
+        logger.warn(`[MAGIC_LINK] [${requestId}] Supabase token not yet valid:`, errorDetails)
       } else {
-        logger.error('Unexpected JWT verification error:', errorDetails)
+        logger.error(`[MAGIC_LINK] [${requestId}] Unexpected JWT verification error:`, errorDetails)
       }
       
       return res.status(401).json({
@@ -272,13 +292,23 @@ router.post('/supabase-login', async (req, res) => {
     // Get or create user in database
     let userId, isNewUser
     try {
-      logger.info('Getting or creating user by email', { email, supabaseUserId })
+      logger.info(`[AUTH_FLOW] [${requestId}] Getting or creating user by email`, {
+        requestId,
+        email,
+        supabaseUserId
+      })
       const userResult = await getOrCreateUserByEmail(email, supabaseUserId)
       userId = userResult.userId
       isNewUser = userResult.isNewUser
-      logger.info('User retrieved/created successfully', { userId, isNewUser })
+      logger.info(`[AUTH_FLOW] [${requestId}] User retrieved/created successfully`, {
+        requestId,
+        userId,
+        isNewUser,
+        email
+      })
     } catch (error) {
-      logger.error('Database error during user lookup/creation:', {
+      logger.error(`[BACKEND_ERROR] [${requestId}] Database error during user lookup/creation:`, {
+        requestId,
         error: error.message,
         name: error.name,
         code: error.code,
@@ -295,13 +325,23 @@ router.post('/supabase-login', async (req, res) => {
     // Issue authentication tokens
     let token, refreshToken
     try {
-      logger.info('Issuing authentication tokens', { userId, email })
+      logger.info(`[SESSION_EXCHANGE] [${requestId}] Issuing authentication tokens`, {
+        requestId,
+        userId,
+        email
+      })
       const tokenResult = await issueAuthTokens(userId, email)
       token = tokenResult.token
       refreshToken = tokenResult.refreshToken
-      logger.info('Authentication tokens issued successfully', { userId })
+      logger.info(`[SESSION_EXCHANGE] [${requestId}] Authentication tokens issued successfully`, {
+        requestId,
+        userId,
+        tokenLength: token.length,
+        refreshTokenLength: refreshToken.length
+      })
     } catch (error) {
-      logger.error('Error issuing authentication tokens:', {
+      logger.error(`[BACKEND_ERROR] [${requestId}] Error issuing authentication tokens:`, {
+        requestId,
         error: error.message,
         name: error.name,
         code: error.code,
@@ -317,11 +357,14 @@ router.post('/supabase-login', async (req, res) => {
       })
     }
 
-    logger.info('Supabase login successful', {
+    const duration = Date.now() - startTime
+    logger.info(`[AUTH_FLOW] [${requestId}] Supabase login successful`, {
+      requestId,
       userId,
       email,
       isNewUser,
-      supabaseUserId
+      supabaseUserId,
+      duration: `${duration}ms`
     })
 
     res.json({
@@ -338,12 +381,15 @@ router.post('/supabase-login', async (req, res) => {
     })
   } catch (error) {
     // Catch-all for any unexpected errors
-    logger.error('Unexpected error during Supabase login:', {
+    const duration = Date.now() - startTime
+    logger.error(`[BACKEND_ERROR] [${requestId}] Unexpected error during Supabase login:`, {
+      requestId,
       error: error.message,
       name: error.name,
       code: error.code,
       stack: error.stack,
-      errorObject: error
+      errorObject: error,
+      duration: `${duration}ms`
     })
     res.status(500).json({
       error: 'Internal server error',

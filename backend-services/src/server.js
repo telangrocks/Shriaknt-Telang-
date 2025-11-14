@@ -49,6 +49,37 @@ const limiter = rateLimit({
 });
 app.use('/api/', limiter);
 
+// Request logging middleware
+app.use((req, res, next) => {
+  const requestId = `req_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+  req.requestId = requestId
+  const startTime = Date.now()
+  
+  // Log request
+  logger.info(`[HTTP_REQUEST] [${requestId}] ${req.method} ${req.path}`, {
+    requestId,
+    method: req.method,
+    path: req.path,
+    ip: req.ip,
+    userAgent: req.get('user-agent'),
+    timestamp: new Date().toISOString()
+  })
+  
+  // Log response when finished
+  res.on('finish', () => {
+    const duration = Date.now() - startTime
+    logger.info(`[HTTP_RESPONSE] [${requestId}] ${req.method} ${req.path} - ${res.statusCode}`, {
+      requestId,
+      method: req.method,
+      path: req.path,
+      statusCode: res.statusCode,
+      duration: `${duration}ms`
+    })
+  })
+  
+  next()
+})
+
 // Body parsing middleware
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));

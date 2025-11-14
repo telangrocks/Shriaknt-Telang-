@@ -85,7 +85,10 @@ const Registration = () => {
   }, [linkSent, resendTimer])
 
   const handleSendMagicLink = useCallback(async () => {
+    const requestId = `magic_link_req_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+    
     if (!emailIsValid) {
+      console.warn(`[AUTH_FLOW] [${requestId}] Invalid email format:`, { requestId, email: normalizedEmail })
       showStatus('Enter a valid email address.', 'error')
       return
     }
@@ -95,6 +98,14 @@ const Registration = () => {
 
     try {
       const redirectTo = new URL('/auth/callback', window.location.origin).href
+      console.log(`[AUTH_FLOW] [${requestId}] Requesting magic link:`, {
+        requestId,
+        email: normalizedEmail,
+        redirectTo,
+        timestamp: new Date().toISOString()
+      })
+      
+      const startTime = Date.now()
       const { error } = await supabase.auth.signInWithOtp({
         email: normalizedEmail,
         options: {
@@ -102,9 +113,26 @@ const Registration = () => {
         }
       })
 
+      const duration = Date.now() - startTime
+
       if (error) {
+        console.error(`[AUTH_FLOW] [${requestId}] Magic link request failed:`, {
+          requestId,
+          error: error.message,
+          name: error.name,
+          status: error.status,
+          code: error.code,
+          duration: `${duration}ms`
+        })
         throw error
       }
+
+      console.log(`[AUTH_FLOW] [${requestId}] Magic link sent successfully:`, {
+        requestId,
+        email: normalizedEmail,
+        redirectTo,
+        duration: `${duration}ms`
+      })
 
       setLinkSent(true)
       showStatus(
@@ -113,7 +141,14 @@ const Registration = () => {
       )
       setResendTimer(45)
     } catch (error) {
-      console.error('Magic link request error:', error)
+      console.error(`[AUTH_FLOW] [${requestId}] Magic link request error:`, {
+        requestId,
+        error: error.message,
+        name: error.name,
+        status: error.status,
+        code: error.code,
+        error: error
+      })
       if (error?.response) {
         showStatus(resolveErrorMessage(error), 'error')
       } else {
