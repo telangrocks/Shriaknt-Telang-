@@ -31,11 +31,14 @@ if (!supabaseAnonKey) {
 }
 
 // Get the current origin for redirect URLs
+// This ensures we always use the actual deployed URL, not localhost
 const getRedirectUrl = () => {
   if (typeof window !== 'undefined') {
+    // Use the actual origin (works for both localhost and production)
     return `${window.location.origin}/auth/callback`
   }
   // Fallback for SSR (shouldn't happen in this app, but safe to have)
+  // Note: This fallback won't be used in browser context
   return 'http://localhost:3001/auth/callback'
 }
 
@@ -43,8 +46,10 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
     persistSession: true,
     autoRefreshToken: true,
-    redirectTo: getRedirectUrl(),
-    detectSessionInUrl: true
+    // Don't set redirectTo in client config - it will use localhost
+    // Instead, we pass emailRedirectTo explicitly in signInWithOtp
+    detectSessionInUrl: true,
+    flowType: 'pkce' // Use PKCE flow for better security
   }
 })
 

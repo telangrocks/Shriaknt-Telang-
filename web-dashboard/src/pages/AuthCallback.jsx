@@ -45,6 +45,33 @@ const AuthCallback = ({ setIsAuthenticated }) => {
 
     const hydrateSessionFromUrl = async () => {
       try {
+        // First, check if there are tokens in the URL hash
+        const hashParams = new URLSearchParams(window.location.hash.substring(1))
+        const accessToken = hashParams.get('access_token')
+        const refreshToken = hashParams.get('refresh_token')
+        const type = hashParams.get('type')
+
+        // If we have tokens in the URL, set the session explicitly
+        if (accessToken && refreshToken && type === 'magiclink') {
+          setMessage('Processing magic link tokens…')
+          const { data, error } = await supabase.auth.setSession({
+            access_token: accessToken,
+            refresh_token: refreshToken
+          })
+
+          if (error) {
+            throw error
+          }
+
+          if (data?.session) {
+            // Clear the hash from URL
+            window.history.replaceState(null, '', window.location.pathname)
+            await exchangeSession(data.session)
+            return
+          }
+        }
+
+        // Fallback: try to get existing session
         const { data, error } = await supabase.auth.getSession()
         if (error) {
           throw error
@@ -66,6 +93,10 @@ const AuthCallback = ({ setIsAuthenticated }) => {
     const { data: listener } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (event === 'SIGNED_IN' && session) {
         try {
+          // Clear hash from URL if present
+          if (window.location.hash) {
+            window.history.replaceState(null, '', window.location.pathname)
+          }
           await exchangeSession(session)
         } catch (error) {
           console.error('Auth state exchange error:', error)
