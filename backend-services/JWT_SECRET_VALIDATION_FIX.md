@@ -72,7 +72,7 @@ If you still see 500 errors:
 
 2. **Check Logs for Specific Errors**:
    - `JsonWebTokenError`: Secret mismatch
-   - `TokenExpiredError`: Token expired (request new magic link)
+   - `TokenExpiredError`: Token expired (sign in again)
    - Database errors: Check database connection
    - Token issuance errors: Check `JWT_SECRET` and `REFRESH_TOKEN_SECRET`
 

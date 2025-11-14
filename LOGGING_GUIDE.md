@@ -64,7 +64,7 @@ Each request/operation gets a unique ID that allows you to trace the entire flow
 ```
 [BACKEND_ERROR] [req_1234567890_abc123] Database error during user lookup/creation
 [BACKEND_ERROR] [req_1234567890_abc123] Error issuing authentication tokens
-[MAGIC_LINK] [req_1234567890_abc123] JWT signature verification failed
+[AUTH_FLOW] [req_1234567890_abc123] JWT signature verification failed
 ```
 
 ## Frontend Logs (Browser Console)
@@ -100,7 +100,7 @@ Search for that ID in your logs to see the entire flow:
 
 ### 3. Filter by Log Type
 - To see all authentication flows: Search for `[AUTH_FLOW]`
-- To see all magic link operations: Search for `[MAGIC_LINK]`
+- To see all authentication operations: Search for `[AUTH_FLOW]`
 - To see all session exchanges: Search for `[SESSION_EXCHANGE]`
 - To see all errors: Search for `[BACKEND_ERROR]`
 
