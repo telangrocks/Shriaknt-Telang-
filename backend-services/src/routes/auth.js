@@ -587,19 +587,19 @@ router.post('/supabase-login', async (req, res) => {
       }
     }
 
-    // Validate that we have required data
+    // Email is optional in database but preferred for user identification
+    // Only validate format if email is provided, don't require it
     if (!email) {
-      logger.error(`[AUTH_FLOW] [${requestId}] Supabase token missing or invalid email claim:`, {
+      logger.warn(`[AUTH_FLOW] [${requestId}] Supabase token missing email claim, but continuing (email is optional):`, {
         requestId,
         rawEmail,
         emailType: typeof rawEmail,
         tokenClaims: Object.keys(decodedToken),
-        sub: decodedToken.sub
+        sub: decodedToken.sub,
+        note: 'Email is optional in database schema, will continue with null email'
       })
-      return res.status(400).json({
-        error: 'Missing email',
-        message: 'Supabase token does not contain a valid email claim. Please ensure email is provided during signup.'
-      })
+      // Don't return error - email can be null in database
+      // email will remain null and be handled by getOrCreateUserByEmail
     }
 
     if (!supabaseUserId) {
@@ -616,17 +616,19 @@ router.post('/supabase-login', async (req, res) => {
       })
     }
 
-    // Validate email format
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-    if (!emailRegex.test(email)) {
-      logger.error(`[AUTH_FLOW] [${requestId}] Invalid email format:`, {
-        requestId,
-        email
-      })
-      return res.status(400).json({
-        error: 'Invalid email',
-        message: 'The email address in the token is not in a valid format.'
-      })
+    // Validate email format only if email is provided
+    if (email) {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+      if (!emailRegex.test(email)) {
+        logger.error(`[AUTH_FLOW] [${requestId}] Invalid email format:`, {
+          requestId,
+          email
+        })
+        return res.status(400).json({
+          error: 'Invalid email',
+          message: 'The email address in the token is not in a valid format.'
+        })
+      }
     }
 
     // Validate UUID format for supabaseUserId
