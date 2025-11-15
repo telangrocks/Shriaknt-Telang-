@@ -1,52 +1,209 @@
 // Load environment variables from .env file (for local development)
 // In production/Docker, environment variables are injected directly by the platform
 // dotenv.config() won't override existing environment variables
+console.log('[BOOT] Loading dotenv...');
 require('dotenv').config({ override: false });
+console.log('[BOOT] ✅ dotenv loaded');
 
+console.log('[BOOT] Loading core dependencies...');
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
+console.log('[BOOT] ✅ Core dependencies loaded');
+
+console.log('[BOOT] Loading database and services...');
 const { createPool, initializeDatabaseSchema } = require('./database/pool');
 const { createRedisClient } = require('./services/redis');
+console.log('[BOOT] ✅ Database and Redis modules loaded');
+
+console.log('[BOOT] Loading utilities...');
 const { validateEnv } = require('./utils/validateEnv');
 const logger = require('./utils/logger');
 const errorHandler = require('./middleware/errorHandler');
+console.log('[BOOT] ✅ Utilities loaded');
 
-// Import routes
-const authRoutes = require('./routes/auth');
-const paymentRoutes = require('./routes/payment');
-const tradeRoutes = require('./routes/trade');
-const exchangeRoutes = require('./routes/exchange');
-const userRoutes = require('./routes/user');
-const marketRoutes = require('./routes/market');
-const strategyRoutes = require('./routes/strategy');
-const adminRoutes = require('./routes/admin');
+// Log startup sequence using logger (now that it's loaded)
+logger.info('=== Backend Service Startup Sequence ===');
+logger.info('[BOOT] Server.js module loaded successfully');
 
-// Import services
-const { startAIService } = require('./services/aiEngine');
-const { startMarketDataService } = require('./services/marketData');
-const { startSubscriptionMonitor } = require('./services/subscriptionMonitor');
+logger.info('[BOOT] Importing route modules...');
+let authRoutes, paymentRoutes, tradeRoutes, exchangeRoutes, userRoutes, marketRoutes, strategyRoutes, adminRoutes;
 
+try {
+  logger.info('[BOOT] Importing auth routes...');
+  authRoutes = require('./routes/auth');
+  logger.info('[BOOT] ✅ Auth routes loaded');
+} catch (error) {
+  logger.error('[BOOT] ❌ Failed to load auth routes:', {
+    error: error.message,
+    name: error.name,
+    stack: error.stack
+  });
+  console.error('[BOOT] FATAL: Auth routes failed to load');
+  process.exit(1);
+}
+
+try {
+  logger.info('[BOOT] Importing payment routes...');
+  paymentRoutes = require('./routes/payment');
+  logger.info('[BOOT] ✅ Payment routes loaded');
+} catch (error) {
+  logger.error('[BOOT] ❌ Failed to load payment routes:', {
+    error: error.message,
+    name: error.name,
+    stack: error.stack
+  });
+  process.exit(1);
+}
+
+try {
+  logger.info('[BOOT] Importing trade routes...');
+  tradeRoutes = require('./routes/trade');
+  logger.info('[BOOT] ✅ Trade routes loaded');
+} catch (error) {
+  logger.error('[BOOT] ❌ Failed to load trade routes:', {
+    error: error.message,
+    name: error.name,
+    stack: error.stack
+  });
+  process.exit(1);
+}
+
+try {
+  logger.info('[BOOT] Importing exchange routes...');
+  exchangeRoutes = require('./routes/exchange');
+  logger.info('[BOOT] ✅ Exchange routes loaded');
+} catch (error) {
+  logger.error('[BOOT] ❌ Failed to load exchange routes:', {
+    error: error.message,
+    name: error.name,
+    stack: error.stack
+  });
+  process.exit(1);
+}
+
+try {
+  logger.info('[BOOT] Importing user routes...');
+  userRoutes = require('./routes/user');
+  logger.info('[BOOT] ✅ User routes loaded');
+} catch (error) {
+  logger.error('[BOOT] ❌ Failed to load user routes:', {
+    error: error.message,
+    name: error.name,
+    stack: error.stack
+  });
+  process.exit(1);
+}
+
+try {
+  logger.info('[BOOT] Importing market routes...');
+  marketRoutes = require('./routes/market');
+  logger.info('[BOOT] ✅ Market routes loaded');
+} catch (error) {
+  logger.error('[BOOT] ❌ Failed to load market routes:', {
+    error: error.message,
+    name: error.name,
+    stack: error.stack
+  });
+  process.exit(1);
+}
+
+try {
+  logger.info('[BOOT] Importing strategy routes...');
+  strategyRoutes = require('./routes/strategy');
+  logger.info('[BOOT] ✅ Strategy routes loaded');
+} catch (error) {
+  logger.error('[BOOT] ❌ Failed to load strategy routes:', {
+    error: error.message,
+    name: error.name,
+    stack: error.stack
+  });
+  process.exit(1);
+}
+
+try {
+  logger.info('[BOOT] Importing admin routes...');
+  adminRoutes = require('./routes/admin');
+  logger.info('[BOOT] ✅ Admin routes loaded');
+} catch (error) {
+  logger.error('[BOOT] ❌ Failed to load admin routes:', {
+    error: error.message,
+    name: error.name,
+    stack: error.stack
+  });
+  process.exit(1);
+}
+
+logger.info('[BOOT] ✅ All route modules loaded successfully');
+
+logger.info('[BOOT] Importing service modules...');
+let startAIService, startMarketDataService, startSubscriptionMonitor;
+
+try {
+  logger.info('[BOOT] Importing AI service...');
+  ({ startAIService } = require('./services/aiEngine'));
+  logger.info('[BOOT] ✅ AI service module loaded');
+} catch (error) {
+  logger.error('[BOOT] ❌ Failed to load AI service:', {
+    error: error.message,
+    name: error.name,
+    stack: error.stack
+  });
+  process.exit(1);
+}
+
+try {
+  logger.info('[BOOT] Importing market data service...');
+  ({ startMarketDataService } = require('./services/marketData'));
+  logger.info('[BOOT] ✅ Market data service module loaded');
+} catch (error) {
+  logger.error('[BOOT] ❌ Failed to load market data service:', {
+    error: error.message,
+    name: error.name,
+    stack: error.stack
+  });
+  process.exit(1);
+}
+
+try {
+  logger.info('[BOOT] Importing subscription monitor...');
+  ({ startSubscriptionMonitor } = require('./services/subscriptionMonitor'));
+  logger.info('[BOOT] ✅ Subscription monitor module loaded');
+} catch (error) {
+  logger.error('[BOOT] ❌ Failed to load subscription monitor:', {
+    error: error.message,
+    name: error.name,
+    stack: error.stack
+  });
+  process.exit(1);
+}
+
+logger.info('[BOOT] ✅ All service modules loaded successfully');
+
+logger.info('[BOOT] Initializing Express application...');
 const app = express();
 const PORT = process.env.PORT || 3000;
+logger.info('[BOOT] ✅ Express app initialized');
 
 // Log startup sequence
-logger.info('=== Backend Service Startup Sequence ===');
-logger.info('[STEP 1/8] Loading environment variables...');
+logger.info('[STEP 1/8] Environment variables loaded from process.env');
 
 // Validate environment variables on startup
+logger.info('[STEP 2/8] Starting environment variable validation...');
 try {
-  logger.info('[STEP 2/8] Validating environment variables...');
+  logger.info('[STEP 2/8] Calling validateEnv()...');
   validateEnv();
   logger.info('[STEP 2/8] ✅ Environment variables validated successfully');
 } catch (error) {
   logger.error('[STEP 2/8] ❌ Environment validation failed:', {
     error: error.message,
     name: error.name,
-    stack: error.stack
+    stack: error.stack,
+    code: error.code
   });
   logger.error('Service cannot start without required environment variables.');
+  console.error('[BOOT] FATAL: Environment validation failed');
   process.exit(1);
 }
 
