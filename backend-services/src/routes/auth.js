@@ -187,7 +187,8 @@ async function getOrCreateUserByEmail(email, supabaseUserId, existingPool) {
         throw new Error(`Invalid UUID format for supabase_user_id: ${uuidValue.substring(0, 20)}...`)
       }
 
-      // Use explicit type casting to ensure PostgreSQL accepts the values
+      // Use explicit type casting, but handle NULL properly
+      // PostgreSQL handles NULL values correctly without explicit casting, so only cast non-NULL values
       newUser = await pool.query(
         `
           INSERT INTO users (
@@ -198,7 +199,7 @@ async function getOrCreateUserByEmail(email, supabaseUserId, existingPool) {
             trial_end_date,
             subscription_status
           )
-          VALUES ($1::VARCHAR(255), $2::UUID, true, NOW(), $3::TIMESTAMP, 'trial'::VARCHAR(50))
+          VALUES ($1, $2::UUID, true, NOW(), $3::TIMESTAMP, 'trial')
           RETURNING id
         `,
         [normalizedEmail, uuidValue, trialEndDate]
