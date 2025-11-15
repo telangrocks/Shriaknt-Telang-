@@ -34,59 +34,187 @@ if (!SUPABASE_JWT_SECRET) {
 }
 
 async function getOrCreateUserByEmail(email, supabaseUserId, existingPool) {
+  // Validate required inputs
+  if (!email && !supabaseUserId) {
+    throw new Error('Either email or supabaseUserId must be provided')
+  }
+
+  if (!supabaseUserId) {
+    throw new Error('supabaseUserId is required')
+  }
+
   const pool = existingPool || createPool()
 
-  const normalizedEmail = email ? email.toLowerCase() : null
+  // Validate database connection
+  if (!pool) {
+    throw new Error('Database pool is not initialized. Check DATABASE_URL configuration.')
+  }
 
-  const userResult = await pool.query(
-    `
-      SELECT id, supabase_user_id
-      FROM users
-      WHERE (supabase_user_id = $1 AND supabase_user_id IS NOT NULL)
-         OR (LOWER(email) = LOWER($2) AND email IS NOT NULL)
-      LIMIT 1
-    `,
-    [supabaseUserId, normalizedEmail]
-  )
+  const normalizedEmail = email ? email.toLowerCase().trim() : null
+
+  let userResult
+  try {
+    // Query for existing user
+    userResult = await pool.query(
+      `
+        SELECT id, supabase_user_id
+        FROM users
+        WHERE (supabase_user_id = $1 AND supabase_user_id IS NOT NULL)
+           OR (LOWER(email) = LOWER($2) AND email IS NOT NULL)
+        LIMIT 1
+      `,
+      [supabaseUserId, normalizedEmail]
+    )
+  } catch (error) {
+    logger.error('Database error during user lookup:', {
+      error: error.message,
+      name: error.name,
+      code: error.code,
+      stack: error.stack,
+      email: normalizedEmail,
+      supabaseUserId,
+      sqlState: error.sqlState,
+      errno: error.errno
+    })
+    
+    // Handle specific database errors
+    if (error.code === 'ECONNREFUSED' || error.code === 'ETIMEDOUT') {
+      throw new Error('Database connection failed. Please check DATABASE_URL and ensure the database is running.')
+    }
+    if (error.code === '42P01') { // Table does not exist
+      throw new Error('Users table does not exist. Database schema may need to be initialized.')
+    }
+    
+    throw new Error(`Database query failed: ${error.message}`)
+  }
 
   const trialDays = parseInt(process.env.TRIAL_DAYS, 10) || 5
   const trialEndDate = new Date()
   trialEndDate.setDate(trialEndDate.getDate() + trialDays)
 
   if (userResult.rows.length === 0) {
-    const newUser = await pool.query(
-      `
-        INSERT INTO users (
-          email,
-          supabase_user_id,
-          is_verified,
-          trial_start_date,
-          trial_end_date,
-          subscription_status
-        )
-        VALUES ($1, $2, true, NOW(), $3, 'trial')
-        RETURNING id
-      `,
-      [normalizedEmail, supabaseUserId, trialEndDate]
-    )
-
-    return { userId: newUser.rows[0].id, isNewUser: true }
+    // Create new user
+    let newUser
+    try {
+      newUser = await pool.query(
+        `
+          INSERT INTO users (
+            email,
+            supabase_user_id,
+            is_verified,
+            trial_start_date,
+            trial_end_date,
+            subscription_status
+          )
+          VALUES ($1, $2, true, NOW(), $3, 'trial')
+          RETURNING id
+        `,
+        [normalizedEmail, supabaseUserId, trialEndDate]
+      )
+      
+      if (!newUser || !newUser.rows || newUser.rows.length === 0) {
+        throw new Error('Failed to create user: INSERT query did not return user ID')
+      }
+      
+      return { userId: newUser.rows[0].id, isNewUser: true }
+    } catch (error) {
+      logger.error('Database error during user creation:', {
+        error: error.message,
+        name: error.name,
+        code: error.code,
+        stack: error.stack,
+        email: normalizedEmail,
+        supabaseUserId,
+        sqlState: error.sqlState,
+        errno: error.errno
+      })
+      
+      // Handle specific database errors
+      if (error.code === '23505') { // Unique constraint violation
+        // User might have been created by another request, try to fetch again
+        logger.info('Unique constraint violation during user creation, attempting to fetch existing user', {
+          email: normalizedEmail,
+          supabaseUserId
+        })
+        
+        try {
+          const retryResult = await pool.query(
+            `
+              SELECT id, supabase_user_id
+              FROM users
+              WHERE (supabase_user_id = $1 AND supabase_user_id IS NOT NULL)
+                 OR (LOWER(email) = LOWER($2) AND email IS NOT NULL)
+              LIMIT 1
+            `,
+            [supabaseUserId, normalizedEmail]
+          )
+          
+          if (retryResult.rows.length > 0) {
+            logger.info('Successfully retrieved user after unique constraint violation', {
+              userId: retryResult.rows[0].id,
+              email: normalizedEmail
+            })
+            return { userId: retryResult.rows[0].id, isNewUser: false }
+          }
+        } catch (retryError) {
+          logger.error('Failed to retrieve user after unique constraint violation:', {
+            error: retryError.message,
+            code: retryError.code
+          })
+        }
+        
+        throw new Error('User already exists with this email or Supabase user ID')
+      }
+      if (error.code === '23503') { // Foreign key violation
+        throw new Error('Invalid reference during user creation')
+      }
+      if (error.code === '23502') { // Not null violation
+        throw new Error('Required field missing during user creation')
+      }
+      if (error.code === 'ECONNREFUSED' || error.code === 'ETIMEDOUT') {
+        throw new Error('Database connection failed. Please check DATABASE_URL and ensure the database is running.')
+      }
+      
+      throw new Error(`Failed to create user: ${error.message}`)
+    }
   }
 
+  // Update existing user if needed
   const existingUser = userResult.rows[0]
 
-  if (!existingUser.supabase_user_id) {
-    await pool.query(
-      `
-        UPDATE users
-        SET supabase_user_id = $1,
-            is_verified = true,
-            email = COALESCE(email, $2),
-            updated_at = NOW()
-        WHERE id = $3
-      `,
-      [supabaseUserId, normalizedEmail, existingUser.id]
-    )
+  if (!existingUser.supabase_user_id || existingUser.supabase_user_id !== supabaseUserId) {
+    try {
+      await pool.query(
+        `
+          UPDATE users
+          SET supabase_user_id = $1,
+              is_verified = true,
+              email = COALESCE(email, $2),
+              updated_at = NOW()
+          WHERE id = $3
+        `,
+        [supabaseUserId, normalizedEmail, existingUser.id]
+      )
+    } catch (error) {
+      logger.error('Database error during user update:', {
+        error: error.message,
+        name: error.name,
+        code: error.code,
+        stack: error.stack,
+        userId: existingUser.id,
+        email: normalizedEmail,
+        supabaseUserId,
+        sqlState: error.sqlState,
+        errno: error.errno
+      })
+      
+      // For update errors, we can still return the user (update is not critical)
+      // Log warning but don't fail the request
+      logger.warn('Failed to update user with Supabase user ID, but user exists and will be returned', {
+        userId: existingUser.id,
+        error: error.message
+      })
+    }
   }
 
   return { userId: existingUser.id, isNewUser: false }
@@ -314,11 +442,42 @@ router.post('/supabase-login', async (req, res) => {
         code: error.code,
         stack: error.stack,
         email,
-        supabaseUserId
+        supabaseUserId,
+        sqlState: error.sqlState,
+        errno: error.errno
       })
-      return res.status(500).json({
+      
+      // Provide more specific error messages based on error type
+      let errorMessage = 'Failed to retrieve or create user account.'
+      let httpStatus = 500
+      
+      if (error.message.includes('Database connection failed')) {
+        errorMessage = 'Database connection failed. Please check server configuration.'
+        httpStatus = 503 // Service Unavailable
+      } else if (error.message.includes('Users table does not exist')) {
+        errorMessage = 'Database schema error. Please contact support.'
+        httpStatus = 500
+      } else if (error.message.includes('User already exists')) {
+        errorMessage = 'User account already exists. Please try logging in instead.'
+        httpStatus = 409 // Conflict
+      } else if (error.message.includes('Required field missing')) {
+        errorMessage = 'Invalid user data provided. Please try again.'
+        httpStatus = 400 // Bad Request
+      } else if (error.code === '23505') { // Unique constraint violation
+        errorMessage = 'User account already exists. Please try logging in instead.'
+        httpStatus = 409 // Conflict
+      } else if (error.code === '42P01') { // Table does not exist
+        errorMessage = 'Database schema error. Please contact support.'
+        httpStatus = 500
+      } else if (error.code === 'ECONNREFUSED' || error.code === 'ETIMEDOUT') {
+        errorMessage = 'Database connection failed. Please try again later.'
+        httpStatus = 503 // Service Unavailable
+      }
+      
+      return res.status(httpStatus).json({
         error: 'Database error',
-        message: 'Failed to retrieve or create user account. Please try again.'
+        message: errorMessage,
+        requestId: requestId
       })
     }
 

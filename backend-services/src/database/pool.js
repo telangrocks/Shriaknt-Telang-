@@ -23,16 +23,46 @@ function createPool() {
     return pool;
   }
 
-  pool = new Pool({
-    connectionString: process.env.DATABASE_URL,
-    max: 20,
-    idleTimeoutMillis: 30000,
-    connectionTimeoutMillis: 2000,
-  });
+  if (!process.env.DATABASE_URL) {
+    const error = new Error('DATABASE_URL environment variable is not set. Cannot create database pool.');
+    logger.error('Failed to create database pool:', {
+      error: error.message,
+      stack: error.stack
+    });
+    throw error;
+  }
 
-  pool.on('error', (err) => {
-    logger.error('Unexpected error on idle client', err);
-  });
+  try {
+    pool = new Pool({
+      connectionString: process.env.DATABASE_URL,
+      max: 20,
+      idleTimeoutMillis: 30000,
+      connectionTimeoutMillis: 2000,
+    });
+
+    pool.on('error', (err) => {
+      logger.error('Unexpected error on idle database client:', {
+        error: err.message,
+        code: err.code,
+        name: err.name,
+        stack: err.stack
+      });
+    });
+
+    logger.info('Database pool created successfully', {
+      maxConnections: 20,
+      connectionTimeout: '2000ms',
+      idleTimeout: '30000ms'
+    });
+  } catch (error) {
+    logger.error('Failed to create database pool:', {
+      error: error.message,
+      name: error.name,
+      code: error.code,
+      stack: error.stack
+    });
+    throw error;
+  }
 
   return pool;
 }
