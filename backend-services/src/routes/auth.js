@@ -34,13 +34,31 @@ if (!SUPABASE_JWT_SECRET) {
 }
 
 async function getOrCreateUserByEmail(email, supabaseUserId, existingPool) {
-  // Validate required inputs
+  // Validate required inputs with detailed logging
+  logger.info('getOrCreateUserByEmail called with:', {
+    hasEmail: !!email,
+    emailType: typeof email,
+    emailValue: email ? `${email.substring(0, 3)}***` : 'null',
+    hasSupabaseUserId: !!supabaseUserId,
+    supabaseUserIdType: typeof supabaseUserId,
+    supabaseUserIdValue: supabaseUserId ? `${supabaseUserId.substring(0, 8)}***` : 'null'
+  })
+
   if (!email && !supabaseUserId) {
+    logger.error('getOrCreateUserByEmail: Both email and supabaseUserId are missing')
     throw new Error('Either email or supabaseUserId must be provided')
   }
 
   if (!supabaseUserId) {
+    logger.error('getOrCreateUserByEmail: supabaseUserId is missing', { email })
     throw new Error('supabaseUserId is required')
+  }
+
+  // Validate supabaseUserId is a valid UUID format
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+  if (!uuidRegex.test(String(supabaseUserId).trim())) {
+    logger.error('getOrCreateUserByEmail: Invalid UUID format for supabaseUserId', { supabaseUserId })
+    throw new Error('supabaseUserId must be a valid UUID format')
   }
 
   const pool = existingPool || createPool()
@@ -50,7 +68,26 @@ async function getOrCreateUserByEmail(email, supabaseUserId, existingPool) {
     throw new Error('Database pool is not initialized. Check DATABASE_URL configuration.')
   }
 
-  const normalizedEmail = email ? email.toLowerCase().trim() : null
+  // Normalize email - ensure it's a valid string or null
+  let normalizedEmail = null
+  if (email) {
+    const trimmed = String(email).trim()
+    if (trimmed.length > 0) {
+      normalizedEmail = trimmed.toLowerCase()
+      // Validate email format
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+      if (!emailRegex.test(normalizedEmail)) {
+        logger.error('getOrCreateUserByEmail: Invalid email format', { email, normalizedEmail })
+        throw new Error('Invalid email format provided')
+      }
+    }
+  }
+
+  // Log what we're about to use
+  logger.info('getOrCreateUserByEmail: Normalized values:', {
+    normalizedEmail: normalizedEmail ? `${normalizedEmail.substring(0, 3)}***` : 'null',
+    supabaseUserId: `${String(supabaseUserId).substring(0, 8)}***`
+  })
 
   let userResult
   try {
@@ -169,7 +206,16 @@ async function getOrCreateUserByEmail(email, supabaseUserId, existingPool) {
         throw new Error('Invalid reference during user creation')
       }
       if (error.code === '23502') { // Not null violation
-        throw new Error('Required field missing during user creation')
+        logger.error('Database NOT NULL constraint violation during user creation:', {
+          error: error.message,
+          constraint: error.constraint,
+          table: error.table,
+          column: error.column,
+          email: normalizedEmail,
+          supabaseUserId,
+          sqlState: error.sqlState
+        })
+        throw new Error(`Required field missing during user creation: ${error.column || 'unknown field'}. Please ensure all required user data is provided.`)
       }
       if (error.code === 'ECONNREFUSED' || error.code === 'ETIMEDOUT') {
         throw new Error('Database connection failed. Please check DATABASE_URL and ensure the database is running.')
@@ -392,28 +438,91 @@ router.post('/supabase-login', async (req, res) => {
       })
     }
 
-    const email = decodedToken.email ? decodedToken.email.toLowerCase() : null
-    const supabaseUserId = decodedToken.sub
+    // Extract email and user ID from token with validation
+    const rawEmail = decodedToken.email
+    const rawSupabaseUserId = decodedToken.sub
+    
+    logger.info(`[AUTH_FLOW] [${requestId}] Extracted token data:`, {
+      requestId,
+      hasEmail: !!rawEmail,
+      emailType: typeof rawEmail,
+      emailValue: rawEmail ? `${rawEmail.substring(0, 3)}***` : 'null',
+      hasSupabaseUserId: !!rawSupabaseUserId,
+      supabaseUserIdType: typeof rawSupabaseUserId,
+      supabaseUserIdValue: rawSupabaseUserId ? `${rawSupabaseUserId.substring(0, 8)}***` : 'null',
+      allTokenClaims: Object.keys(decodedToken)
+    })
 
+    // Normalize email - handle empty strings and whitespace
+    let email = null
+    if (rawEmail) {
+      const trimmed = String(rawEmail).trim()
+      if (trimmed.length > 0) {
+        email = trimmed.toLowerCase()
+      }
+    }
+
+    // Validate supabaseUserId - must be a non-empty string/UUID
+    let supabaseUserId = null
+    if (rawSupabaseUserId) {
+      const trimmed = String(rawSupabaseUserId).trim()
+      if (trimmed.length > 0) {
+        supabaseUserId = trimmed
+      }
+    }
+
+    // Validate that we have required data
     if (!email) {
-      logger.warn('Supabase token missing email claim', {
+      logger.error(`[AUTH_FLOW] [${requestId}] Supabase token missing or invalid email claim:`, {
+        requestId,
+        rawEmail,
+        emailType: typeof rawEmail,
         tokenClaims: Object.keys(decodedToken),
         sub: decodedToken.sub
       })
       return res.status(400).json({
         error: 'Missing email',
-        message: 'Supabase token does not contain an email claim.'
+        message: 'Supabase token does not contain a valid email claim. Please ensure email is provided during signup.'
       })
     }
 
     if (!supabaseUserId) {
-      logger.warn('Supabase token missing subject claim', {
+      logger.error(`[AUTH_FLOW] [${requestId}] Supabase token missing or invalid subject claim:`, {
+        requestId,
+        rawSupabaseUserId,
+        supabaseUserIdType: typeof rawSupabaseUserId,
         tokenClaims: Object.keys(decodedToken),
         email: decodedToken.email
       })
       return res.status(400).json({
         error: 'Missing subject',
-        message: 'Supabase token does not contain a subject claim.'
+        message: 'Supabase token does not contain a valid subject (user ID) claim.'
+      })
+    }
+
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    if (!emailRegex.test(email)) {
+      logger.error(`[AUTH_FLOW] [${requestId}] Invalid email format:`, {
+        requestId,
+        email
+      })
+      return res.status(400).json({
+        error: 'Invalid email',
+        message: 'The email address in the token is not in a valid format.'
+      })
+    }
+
+    // Validate UUID format for supabaseUserId
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+    if (!uuidRegex.test(supabaseUserId)) {
+      logger.error(`[AUTH_FLOW] [${requestId}] Invalid UUID format for supabaseUserId:`, {
+        requestId,
+        supabaseUserId
+      })
+      return res.status(400).json({
+        error: 'Invalid user ID',
+        message: 'The user ID in the token is not in a valid UUID format.'
       })
     }
 
