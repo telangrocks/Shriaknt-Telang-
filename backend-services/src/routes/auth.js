@@ -304,11 +304,36 @@ async function getOrCreateUserByEmail(email, supabaseUserId, existingPool) {
         
         logger.error('Database NOT NULL constraint violation during user creation:', errorDetails)
         
-        // Create a more helpful error message
-        const columnName = error.column || error.detail?.match(/column "([^"]+)"/i)?.[1] || 'unknown'
-        const helpfulMessage = `Required field '${columnName}' is missing or null. This is likely a database schema issue. Values being inserted: email=${normalizedEmail ? 'provided' : 'null'}, supabaseUserId=${supabaseUserId ? 'provided' : 'null'}`
+        // Create a more helpful error message with improved column name extraction
+        // Try multiple methods to extract the column name from PostgreSQL error
+        let columnName = 'unknown'
+        if (error.column) {
+          columnName = error.column
+        } else if (error.detail) {
+          // Try various PostgreSQL error detail formats
+          const detailMatch = error.detail.match(/column "([^"]+)"/i) || 
+                             error.detail.match(/column\s+([^\s,]+)/i) ||
+                             error.detail.match(/\(([^)]+)\)/i)
+          if (detailMatch) {
+            columnName = detailMatch[1]
+          }
+        } else if (error.message) {
+          // Try to extract from error message
+          const messageMatch = error.message.match(/column "([^"]+)"/i) ||
+                              error.message.match(/column\s+([^\s,]+)/i) ||
+                              error.message.match(/null value in column "([^"]+)"/i)
+          if (messageMatch) {
+            columnName = messageMatch[1]
+          }
+        }
         
-        throw new Error(`Required field missing during user creation: ${columnName}. ${helpfulMessage}`)
+        const helpfulMessage = `Required field '${columnName}' is missing or null. This is likely a database schema issue. Values being inserted: email=${normalizedEmail ? 'provided' : 'null'}, supabaseUserId=${supabaseUserId ? 'provided' : 'null'}, is_verified=true, trial_start_date=NOW(), trial_end_date=${trialEndDate ? 'provided' : 'null'}, subscription_status='trial'`
+        
+        // Create error with original database error attached for better error handling upstream
+        const userError = new Error(`Required field missing during user creation: ${columnName}. ${helpfulMessage}`)
+        userError.originalError = error
+        userError.column = columnName
+        throw userError
       }
       if (error.code === 'ECONNREFUSED' || error.code === 'ETIMEDOUT') {
         throw new Error('Database connection failed. Please check DATABASE_URL and ensure the database is running.')
@@ -694,9 +719,30 @@ router.post('/supabase-login', async (req, res) => {
         errorMessage = 'User account already exists. Please try logging in instead.'
         httpStatus = 409 // Conflict
       } else if (error.message.includes('Required field missing')) {
-        // Extract the column name from the error message if available
-        const columnMatch = error.message.match(/column[:\s]+(\w+)/i)
-        const columnName = columnMatch ? columnMatch[1] : 'unknown'
+        // Extract the column name from the error message with improved regex
+        // The error message format is: "Required field missing during user creation: {columnName}. {details}"
+        let columnName = 'unknown'
+        
+        // First try to extract from the error message itself
+        const columnMatch = error.message.match(/Required field missing during user creation:\s*(\w+)/i) ||
+                           error.message.match(/column[:\s]+"([^"]+)"/i) ||
+                           error.message.match(/column[:\s]+(\w+)/i) ||
+                           error.message.match(/field\s+'([^']+)'/i)
+        
+        if (columnMatch) {
+          columnName = columnMatch[1]
+        }
+        
+        // If we still don't have it, check if the error object itself has the column property
+        // or if the original database error has the column
+        if (columnName === 'unknown') {
+          if (error.column) {
+            columnName = error.column
+          } else if (error.originalError) {
+            columnName = error.originalError.column || error.originalError.detail?.match(/column "([^"]+)"/i)?.[1] || 'unknown'
+          }
+        }
+        
         errorMessage = `Invalid user data: required field '${columnName}' is missing. Please contact support if this issue persists.`
         httpStatus = 400 // Bad Request
         // Log the detailed error for debugging
@@ -707,7 +753,9 @@ router.post('/supabase-login', async (req, res) => {
           column: columnName,
           email: email,
           supabaseUserId: supabaseUserId,
-          allErrorProps: Object.keys(error)
+          allErrorProps: Object.keys(error),
+          originalErrorColumn: error.originalError?.column,
+          originalErrorDetail: error.originalError?.detail
         })
       } else if (error.code === '23505') { // Unique constraint violation
         errorMessage = 'User account already exists. Please try logging in instead.'

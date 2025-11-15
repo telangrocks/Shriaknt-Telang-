@@ -289,6 +289,40 @@ async function initializeSchema(client) {
       WHERE email IS NOT NULL
     `);
 
+    // Make password column nullable for Supabase-authenticated users
+    // Supabase handles authentication, so we don't store passwords for Supabase users
+    try {
+      // Check if password column exists first
+      const columnCheck = await client.query(`
+        SELECT column_name, is_nullable
+        FROM information_schema.columns
+        WHERE table_schema = 'public' 
+          AND table_name = 'users' 
+          AND column_name = 'password'
+      `);
+      
+      if (columnCheck.rows.length > 0) {
+        const isNullable = columnCheck.rows[0].is_nullable === 'YES';
+        if (!isNullable) {
+          await client.query(`
+            ALTER TABLE public.users 
+            ALTER COLUMN password DROP NOT NULL
+          `);
+          logger.info('Password column made nullable for Supabase authentication');
+        } else {
+          logger.info('Password column is already nullable');
+        }
+      } else {
+        logger.info('Password column does not exist (this is fine for Supabase-only authentication)');
+      }
+    } catch (err) {
+      // Log but don't fail startup - migration is optional
+      logger.warn('Could not modify password column (non-critical):', {
+        error: err.message,
+        code: err.code
+      });
+    }
+
     // FIXED: exchange_keys with UUID user_id
     await client.query(`
       CREATE TABLE IF NOT EXISTS exchange_keys (
