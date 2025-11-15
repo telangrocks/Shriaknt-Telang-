@@ -154,37 +154,99 @@ const Registration = ({ setIsAuthenticated }) => {
       const duration = Date.now() - startTime
       const apiData = response.data
 
-      if (!apiData?.success || !apiData?.token) {
-        console.error(`[AUTH_FLOW] [${requestId}] Invalid API response:`, {
+      console.log(`[AUTH_FLOW] [${requestId}] API response received:`, {
+        requestId,
+        hasSuccess: !!apiData?.success,
+        hasToken: !!apiData?.token,
+        hasRefreshToken: !!apiData?.refreshToken,
+        hasUser: !!apiData?.user,
+        userData: apiData?.user,
+        message: apiData?.message,
+        duration: `${duration}ms`
+      })
+
+      // CRITICAL: Validate response structure
+      if (!apiData) {
+        console.error(`[AUTH_FLOW] [${requestId}] No response data received`)
+        throw new Error('No response received from server. Please try again.')
+      }
+
+      if (!apiData.success) {
+        console.error(`[AUTH_FLOW] [${requestId}] API returned success: false`, {
           requestId,
-          response: apiData,
-          duration: `${duration}ms`
+          message: apiData?.message,
+          error: apiData?.error
         })
         throw new Error(
-          apiData?.message || apiData?.error || 'Session exchange failed - invalid response.'
+          apiData?.message || apiData?.error || 'Session exchange failed - server returned error.'
         )
       }
 
-      console.log(`[AUTH_FLOW] [${requestId}] Success, storing tokens...`, {
+      if (!apiData.token) {
+        console.error(`[AUTH_FLOW] [${requestId}] Missing token in response`, {
+          requestId,
+          responseKeys: Object.keys(apiData || {})
+        })
+        throw new Error('Authentication token missing from server response. Please try again.')
+      }
+
+      // Validate user data structure
+      if (!apiData.user || !apiData.user.id) {
+        console.error(`[AUTH_FLOW] [${requestId}] Invalid user data in response:`, {
+          requestId,
+          user: apiData.user,
+          hasUser: !!apiData.user,
+          userId: apiData.user?.id
+        })
+        throw new Error('Invalid user data provided. Please contact support if this issue persists.')
+      }
+
+      console.log(`[AUTH_FLOW] [${requestId}] ✅ Success, storing tokens and user data...`, {
         requestId,
         hasToken: !!apiData.token,
+        hasRefreshToken: !!apiData.refreshToken,
         userId: apiData.user?.id,
+        userEmail: apiData.user?.email,
         isNewUser: apiData.user?.isNewUser,
         duration: `${duration}ms`
       })
 
+      // Store authentication tokens
       persistAuthSession(apiData.token, apiData?.refreshToken)
+      
+      // Store user data for reference
+      if (apiData.user) {
+        localStorage.setItem('user', JSON.stringify(apiData.user))
+      }
+      
+      // Update authentication state FIRST
       setIsAuthenticated(true)
       
-      // Use setTimeout to ensure state updates are processed before navigation
+      console.log(`[AUTH_FLOW] [${requestId}] ✅ Authentication complete, preparing navigation...`, {
+        requestId,
+        hasToken: !!localStorage.getItem(AUTH_TOKEN_KEY),
+        hasRefreshToken: !!localStorage.getItem(REFRESH_TOKEN_KEY),
+        hasUser: !!localStorage.getItem('user')
+      })
+      
+      // Navigate to dashboard (root path)
+      // Use setTimeout to ensure state updates and localStorage writes are processed
       setTimeout(() => {
+        console.log(`[AUTH_FLOW] [${requestId}] 🚀 Navigating to dashboard...`)
+        // Force a re-check of auth state by triggering a storage event
+        window.dispatchEvent(new StorageEvent('storage', {
+          key: AUTH_TOKEN_KEY,
+          newValue: localStorage.getItem(AUTH_TOKEN_KEY),
+          storageArea: localStorage
+        }))
         navigate('/', { replace: true })
-      }, 100)
+      }, 150)
     } catch (error) {
       // Log full error details for debugging
       const errorDetails = {
         requestId,
         message: error?.message,
+        name: error?.name,
         status: error?.response?.status,
         statusText: error?.response?.statusText,
         responseData: error?.response?.data,
@@ -195,7 +257,7 @@ const Registration = ({ setIsAuthenticated }) => {
         requestHeaders: error?.config?.headers
       }
       
-      console.error(`[AUTH_FLOW] [${requestId}] Exception:`, errorDetails)
+      console.error(`[AUTH_FLOW] [${requestId}] ❌ Session exchange exception:`, errorDetails)
       
       // Also log the response data separately for easier inspection
       if (error?.response?.data) {
@@ -207,16 +269,37 @@ const Registration = ({ setIsAuthenticated }) => {
       
       if (error?.response?.data) {
         const data = error.response.data
-        errorMessage = data?.message || data?.error || data?.errorMessage || errorMessage
+        
+        // Prioritize backend error messages
+        if (data?.message) {
+          errorMessage = data.message
+        } else if (data?.error) {
+          errorMessage = typeof data.error === 'string' ? data.error : 'An error occurred during authentication'
+        } else if (data?.errorMessage) {
+          errorMessage = data.errorMessage
+        }
         
         // Log specific error codes for debugging
         if (data?.error || data?.message) {
-          console.error(`[AUTH_FLOW] [${requestId}] Backend error:`, {
+          console.error(`[AUTH_FLOW] [${requestId}] Backend error details:`, {
             error: data.error,
             message: data.message,
-            requestId: data.requestId
+            requestId: data.requestId,
+            status: error?.response?.status
           })
         }
+        
+        // Handle specific HTTP status codes
+        if (error?.response?.status === 400) {
+          errorMessage = data?.message || 'Invalid request. Please check your input and try again.'
+        } else if (error?.response?.status === 401) {
+          errorMessage = data?.message || 'Authentication failed. Please sign in again.'
+        } else if (error?.response?.status === 500) {
+          errorMessage = data?.message || 'Server error occurred. Please try again later.'
+        }
+      } else if (error?.request) {
+        // Network error - no response received
+        errorMessage = 'Unable to connect to server. Please check your network connection and try again.'
       }
       
       throw new Error(errorMessage)

@@ -820,18 +820,32 @@ router.post('/supabase-login', async (req, res) => {
       duration: `${duration}ms`
     })
 
-    res.json({
+    // CRITICAL: Ensure response has consistent structure that frontend expects
+    const response = {
       success: true,
       message: isNewUser ? 'Account created and verified' : 'Login successful',
       token,
       refreshToken,
       user: {
         id: userId,
-        email,
+        email: email || null,
         isNewUser,
         supabaseUserId
       }
+    }
+
+    logger.info(`[AUTH_FLOW] [${requestId}] Sending successful response:`, {
+      requestId,
+      hasSuccess: !!response.success,
+      hasToken: !!response.token,
+      hasRefreshToken: !!response.refreshToken,
+      hasUser: !!response.user,
+      userId: response.user.id,
+      userEmail: response.user.email,
+      isNewUser: response.user.isNewUser
     })
+
+    res.json(response)
   } catch (error) {
     // Catch-all for any unexpected errors with comprehensive logging
     const duration = Date.now() - startTime
