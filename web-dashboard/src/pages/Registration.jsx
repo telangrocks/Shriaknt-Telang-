@@ -40,21 +40,41 @@ const resolveAuthError = (error) => {
 
   // Handle Supabase 422 errors with specific messages
   if (error?.status === 422) {
+    // Check for user_already_exists error code first
+    if (error?.code === 'user_already_exists' || 
+        error?.message?.toLowerCase().includes('user_already_exists') ||
+        error?.error_description?.toLowerCase().includes('user_already_exists')) {
+      return 'This email is already registered. Please sign in instead.'
+    }
+
     if (error?.error_description) {
+      // Check error description for common patterns
+      const desc = error.error_description.toLowerCase()
+      if (desc.includes('already exists') || desc.includes('already registered')) {
+        return 'This email is already registered. Please sign in instead.'
+      }
       return error.error_description
     }
     if (error?.message) {
       // Map common Supabase error codes to user-friendly messages
-      if (error.message.includes('password')) {
+      const msg = error.message.toLowerCase()
+      if (msg.includes('password')) {
         return 'Password does not meet requirements. Please use at least 8 characters.'
       }
-      if (error.message.includes('email') || error.message.includes('Email')) {
+      if (msg.includes('email')) {
         return 'Invalid email address. Please check your email format.'
       }
-      if (error.message.includes('already registered') || error.message.includes('already exists')) {
+      if (msg.includes('already registered') || msg.includes('already exists')) {
         return 'This email is already registered. Please sign in instead.'
       }
       return error.message
+    }
+    if (error?.hint) {
+      const hint = error.hint.toLowerCase()
+      if (hint.includes('already exists') || hint.includes('already registered')) {
+        return 'This email is already registered. Please sign in instead.'
+      }
+      return error.hint
     }
     return 'Invalid signup data. Please check your email and password.'
   }
@@ -322,8 +342,25 @@ const Registration = ({ setIsAuthenticated }) => {
         }
         
         // Handle "user already exists" error during signup
-        if (isSignUp && result.error.code === 'user_already_exists') {
-          console.log(`[AUTH_FLOW] [${requestId}] User already exists, switching to sign in mode...`)
+        // Check both error code and message/hint for user_already_exists
+        const isUserAlreadyExists = 
+          result.error.code === 'user_already_exists' ||
+          result.error.message?.toLowerCase().includes('user_already_exists') ||
+          result.error.error_description?.toLowerCase().includes('already exists') ||
+          result.error.message?.toLowerCase().includes('already exists') ||
+          result.error.hint?.toLowerCase().includes('already exists') ||
+          (result.error.status === 422 && (
+            result.error.message?.toLowerCase().includes('already registered') ||
+            result.error.error_description?.toLowerCase().includes('already registered')
+          ))
+
+        if (isSignUp && isUserAlreadyExists) {
+          console.log(`[AUTH_FLOW] [${requestId}] User already exists (code: ${result.error.code}), switching to sign in mode...`, {
+            requestId,
+            errorCode: result.error.code,
+            errorMessage: result.error.message,
+            errorDescription: result.error.error_description
+          })
           setIsSignUp(false)
           showStatus('This account already exists. Please sign in with your password.', 'info')
           
