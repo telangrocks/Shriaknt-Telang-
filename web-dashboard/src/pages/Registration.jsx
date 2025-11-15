@@ -136,20 +136,43 @@ const Registration = ({ setIsAuthenticated }) => {
         navigate('/', { replace: true })
       }, 100)
     } catch (error) {
-      console.error(`[AUTH_FLOW] [${requestId}] Exception:`, {
+      // Log full error details for debugging
+      const errorDetails = {
         requestId,
         message: error?.message,
-        response: error?.response?.data,
         status: error?.response?.status,
-        error: error
-      })
+        statusText: error?.response?.statusText,
+        responseData: error?.response?.data,
+        responseHeaders: error?.response?.headers,
+        requestUrl: error?.config?.url,
+        requestMethod: error?.config?.method,
+        requestData: error?.config?.data,
+        requestHeaders: error?.config?.headers
+      }
+      
+      console.error(`[AUTH_FLOW] [${requestId}] Exception:`, errorDetails)
+      
+      // Also log the response data separately for easier inspection
+      if (error?.response?.data) {
+        console.error(`[AUTH_FLOW] [${requestId}] Error response data:`, JSON.stringify(error.response.data, null, 2))
+      }
       
       // Extract error message from axios error response
-      const errorMessage = 
-        error?.response?.data?.message ||
-        error?.response?.data?.error ||
-        error?.message ||
-        'Session exchange failed. Please try again.'
+      let errorMessage = error?.message || 'Session exchange failed. Please try again.'
+      
+      if (error?.response?.data) {
+        const data = error.response.data
+        errorMessage = data?.message || data?.error || data?.errorMessage || errorMessage
+        
+        // Log specific error codes for debugging
+        if (data?.error || data?.message) {
+          console.error(`[AUTH_FLOW] [${requestId}] Backend error:`, {
+            error: data.error,
+            message: data.message,
+            requestId: data.requestId
+          })
+        }
+      }
       
       throw new Error(errorMessage)
     }
