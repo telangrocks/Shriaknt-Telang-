@@ -179,15 +179,21 @@ async function getOrCreateUserByEmail(email, supabaseUserId, existingPool, userM
     // Split full name into first and last name
     const nameParts = fullName.trim().split(/\s+/)
     finalFirstName = nameParts[0] || ''
-    finalLastName = nameParts.slice(1).join(' ') || null
+    finalLastName = nameParts.slice(1).join(' ') || ''
     finalName = fullName
   } else if (!finalFirstName && !fullName) {
     // No name provided, use email prefix or default
     finalFirstName = normalizedEmail ? normalizedEmail.split('@')[0] : 'User'
+    finalLastName = '' // Empty string for last_name if not provided
     finalName = finalFirstName
   } else if (finalFirstName && !finalName) {
     // We have first_name but no full name
     finalName = finalLastName ? `${finalFirstName} ${finalLastName}` : finalFirstName
+  }
+  
+  // Ensure last_name is at least an empty string (never null) for database compatibility
+  if (!finalLastName) {
+    finalLastName = ''
   }
 
   logger.info('getOrCreateUserByEmail: Values validated, proceeding with INSERT', {
@@ -196,6 +202,8 @@ async function getOrCreateUserByEmail(email, supabaseUserId, existingPool, userM
     trialEndDate: trialEndDate.toISOString(),
     hasFirstName: !!finalFirstName,
     firstNameLength: finalFirstName?.length || 0,
+    hasLastName: !!finalLastName,
+    lastNameLength: finalLastName?.length || 0,
     hasName: !!finalName,
     nameLength: finalName?.length || 0
   })
@@ -210,6 +218,7 @@ async function getOrCreateUserByEmail(email, supabaseUserId, existingPool, userM
         supabaseUserId: `${String(supabaseUserId).substring(0, 8)}***`,
         trialEndDate: trialEndDate.toISOString(),
         firstName: finalFirstName ? `${finalFirstName.substring(0, 3)}***` : 'null',
+        lastName: finalLastName ? `${finalLastName.substring(0, 3)}***` : 'null',
         name: finalName ? `${finalName.substring(0, 3)}***` : 'null'
       })
 
@@ -237,7 +246,7 @@ async function getOrCreateUserByEmail(email, supabaseUserId, existingPool, userM
             AND column_name = 'first_name'
         `)
         hasFirstNameColumn = columnCheck.rows.length > 0
-        logger.info('getOrCreateUserByEmail: Database schema check', {
+        logger.info('getOrCreateUserByEmail: Database schema check for first_name', {
           hasFirstNameColumn,
           isNullable: hasFirstNameColumn ? columnCheck.rows[0].is_nullable === 'YES' : null
         })
@@ -247,6 +256,29 @@ async function getOrCreateUserByEmail(email, supabaseUserId, existingPool, userM
         })
         // Assume it exists if we can't check (safer to include it)
         hasFirstNameColumn = true
+      }
+
+      // Check if last_name column exists in the database
+      let hasLastNameColumn = false
+      try {
+        const lastNameCheck = await pool.query(`
+          SELECT column_name, is_nullable
+          FROM information_schema.columns
+          WHERE table_schema = 'public' 
+            AND table_name = 'users' 
+            AND column_name = 'last_name'
+        `)
+        hasLastNameColumn = lastNameCheck.rows.length > 0
+        logger.info('getOrCreateUserByEmail: Database schema check for last_name', {
+          hasLastNameColumn,
+          isNullable: hasLastNameColumn ? lastNameCheck.rows[0].is_nullable === 'YES' : null
+        })
+      } catch (schemaError) {
+        logger.warn('getOrCreateUserByEmail: Could not check for last_name column', {
+          error: schemaError.message
+        })
+        // Assume it exists if we can't check (safer to include it)
+        hasLastNameColumn = true
       }
 
       // Check for name column
@@ -306,6 +338,14 @@ async function getOrCreateUserByEmail(email, supabaseUserId, existingPool, userM
         insertColumns.push('first_name')
         allPlaceholders.push(`$${paramIndex++}`)
         queryValues.push(finalFirstName)
+      }
+      
+      // last_name (if column exists)
+      if (hasLastNameColumn) {
+        insertColumns.push('last_name')
+        allPlaceholders.push(`$${paramIndex++}`)
+        // Use extracted last_name or empty string if not available
+        queryValues.push(finalLastName || '')
       }
       
       // name (if column exists and we have a name value)
