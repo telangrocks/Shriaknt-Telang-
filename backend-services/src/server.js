@@ -31,8 +31,24 @@ const { startSubscriptionMonitor } = require('./services/subscriptionMonitor');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// Log startup sequence
+logger.info('=== Backend Service Startup Sequence ===');
+logger.info('[STEP 1/8] Loading environment variables...');
+
 // Validate environment variables on startup
-validateEnv();
+try {
+  logger.info('[STEP 2/8] Validating environment variables...');
+  validateEnv();
+  logger.info('[STEP 2/8] ✅ Environment variables validated successfully');
+} catch (error) {
+  logger.error('[STEP 2/8] ❌ Environment validation failed:', {
+    error: error.message,
+    name: error.name,
+    stack: error.stack
+  });
+  logger.error('Service cannot start without required environment variables.');
+  process.exit(1);
+}
 
 // Security middleware
 app.use(helmet());
@@ -140,31 +156,122 @@ app.use(errorHandler);
 // Initialize database and start services
 async function startServer() {
   try {
+    logger.info('[STEP 3/8] Creating database pool...');
     // Initialize database pool
     const pool = createPool();
+    logger.info('[STEP 3/8] ✅ Database pool created');
+    
+    logger.info('[STEP 4/8] Initializing database schema...');
     await initializeDatabaseSchema();
-    logger.info('Database pool initialized');
+    logger.info('[STEP 4/8] ✅ Database schema initialized successfully');
 
+    logger.info('[STEP 5/8] Creating Redis client...');
     // Initialize Redis
     const redis = createRedisClient();
-    await redis.connect();
-    logger.info('Redis client connected');
+    logger.info('[STEP 5/8] ✅ Redis client created');
+    
+    logger.info('[STEP 6/8] Connecting to Redis...');
+    try {
+      await redis.connect();
+      logger.info('[STEP 6/8] ✅ Redis client connected successfully');
+    } catch (redisError) {
+      logger.error('[STEP 6/8] ❌ Redis connection failed:', {
+        error: redisError.message,
+        name: redisError.name,
+        code: redisError.code,
+        stack: redisError.stack
+      });
+      logger.warn('⚠️  Continuing startup without Redis (cache/sessions may be unavailable)');
+      // Don't exit - Redis is optional for basic functionality
+    }
 
-    // Start background services
-    startAIService();
-    startMarketDataService();
-    startSubscriptionMonitor();
+    logger.info('[STEP 7/8] Starting background services...');
+    try {
+      startAIService();
+      logger.info('[STEP 7/8] ✅ AI Service started');
+    } catch (aiError) {
+      logger.error('[STEP 7/8] ❌ AI Service failed to start:', {
+        error: aiError.message,
+        name: aiError.name
+      });
+      // Continue - AI service is optional
+    }
+    
+    try {
+      startMarketDataService();
+      logger.info('[STEP 7/8] ✅ Market Data Service started');
+    } catch (marketError) {
+      logger.error('[STEP 7/8] ❌ Market Data Service failed to start:', {
+        error: marketError.message,
+        name: marketError.name
+      });
+      // Continue - Market data service is optional
+    }
+    
+    try {
+      startSubscriptionMonitor();
+      logger.info('[STEP 7/8] ✅ Subscription Monitor started');
+    } catch (subError) {
+      logger.error('[STEP 7/8] ❌ Subscription Monitor failed to start:', {
+        error: subError.message,
+        name: subError.name
+      });
+      // Continue - Subscription monitor is optional
+    }
 
+    logger.info('[STEP 8/8] Starting HTTP server...');
     // Start server
     app.listen(PORT, () => {
+      logger.info('=== ✅ Backend Service Started Successfully ===');
       logger.info(`Server running on port ${PORT} in ${process.env.NODE_ENV} mode`);
+      logger.info(`Health check available at: http://localhost:${PORT}/health`);
     });
 
   } catch (error) {
-    logger.error('Failed to start server:', error);
+    logger.error('=== ❌ Backend Service Startup Failed ===');
+    logger.error('Failed to start server:', {
+      error: error.message,
+      name: error.name,
+      code: error.code,
+      stack: error.stack,
+      sqlState: error.sqlState,
+      errno: error.errno
+    });
+    logger.error('Exiting with code 1...');
     process.exit(1);
   }
 }
+
+// Handle unhandled promise rejections
+process.on('unhandledRejection', (reason, promise) => {
+  logger.error('=== ❌ Unhandled Promise Rejection ===');
+  logger.error('Unhandled Rejection at:', promise);
+  logger.error('Reason:', {
+    error: reason?.message || reason,
+    name: reason?.name,
+    stack: reason?.stack,
+    code: reason?.code
+  });
+  // Don't exit in production - log and continue
+  // In development, you might want to exit for debugging
+  if (process.env.NODE_ENV !== 'production') {
+    logger.error('Exiting due to unhandled rejection in development mode');
+    process.exit(1);
+  }
+});
+
+// Handle uncaught exceptions
+process.on('uncaughtException', (error) => {
+  logger.error('=== ❌ Uncaught Exception ===');
+  logger.error('Uncaught Exception:', {
+    error: error.message,
+    name: error.name,
+    stack: error.stack,
+    code: error.code
+  });
+  logger.error('Exiting due to uncaught exception...');
+  process.exit(1);
+});
 
 // Graceful shutdown
 process.on('SIGTERM', async () => {
@@ -178,7 +285,17 @@ process.on('SIGINT', async () => {
 });
 
 // Start the server
-startServer();
+logger.info('Starting server initialization...');
+startServer().catch((error) => {
+  logger.error('=== ❌ Fatal Error in startServer() ===');
+  logger.error('Unhandled error in startServer():', {
+    error: error.message,
+    name: error.name,
+    stack: error.stack,
+    code: error.code
+  });
+  process.exit(1);
+});
 
 module.exports = app;
 
