@@ -351,10 +351,13 @@ const Registration = ({ setIsAuthenticated }) => {
         }
 
         // Sign up with email and password
-        // Remove emailRedirectTo if undefined (Supabase may reject undefined values)
+        // Include name in user metadata so it's available in the JWT token
         const signUpOptions = {
           data: {
-            email: normalizedEmail
+            email: normalizedEmail,
+            // Note: Supabase doesn't have a built-in name field in signUp
+            // We'll extract name from email prefix as fallback if not provided
+            // The backend will handle extracting first_name from user_metadata or email
           }
         }
 

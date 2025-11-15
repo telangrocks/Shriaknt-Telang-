@@ -323,6 +323,52 @@ async function initializeSchema(client) {
       });
     }
 
+    // Handle first_name column - make it nullable if it exists and is NOT NULL
+    // This allows the system to work with databases that have first_name as required
+    try {
+      const firstNameCheck = await client.query(`
+        SELECT column_name, is_nullable, column_default
+        FROM information_schema.columns
+        WHERE table_schema = 'public' 
+          AND table_name = 'users' 
+          AND column_name = 'first_name'
+      `);
+      
+      if (firstNameCheck.rows.length > 0) {
+        const isNullable = firstNameCheck.rows[0].is_nullable === 'YES';
+        const hasDefault = !!firstNameCheck.rows[0].column_default;
+        
+        if (!isNullable && !hasDefault) {
+          // Try to make it nullable, but if it fails (due to existing NOT NULL constraint), 
+          // the application code will handle it by providing a default value
+          try {
+            await client.query(`
+              ALTER TABLE public.users 
+              ALTER COLUMN first_name DROP NOT NULL
+            `);
+            logger.info('first_name column made nullable');
+          } catch (alterError) {
+            logger.warn('Could not make first_name nullable (application will provide default):', {
+              error: alterError.message,
+              code: alterError.code,
+              note: 'The application will automatically provide a default first_name value during user creation'
+            });
+          }
+        } else {
+          logger.info('first_name column is already nullable or has a default value');
+        }
+      } else {
+        logger.info('first_name column does not exist (this is fine)');
+      }
+    } catch (err) {
+      // Log but don't fail startup - migration is optional
+      logger.warn('Could not check/modify first_name column (non-critical):', {
+        error: err.message,
+        code: err.code,
+        note: 'The application will handle first_name dynamically based on schema'
+      });
+    }
+
     // FIXED: exchange_keys with UUID user_id
     await client.query(`
       CREATE TABLE IF NOT EXISTS exchange_keys (

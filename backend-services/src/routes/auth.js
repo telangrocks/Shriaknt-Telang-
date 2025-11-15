@@ -33,7 +33,7 @@ if (!SUPABASE_JWT_SECRET) {
   }
 }
 
-async function getOrCreateUserByEmail(email, supabaseUserId, existingPool) {
+async function getOrCreateUserByEmail(email, supabaseUserId, existingPool, userMetadata = {}) {
   // Validate required inputs with detailed logging
   logger.info('getOrCreateUserByEmail called with:', {
     hasEmail: !!email,
@@ -41,7 +41,9 @@ async function getOrCreateUserByEmail(email, supabaseUserId, existingPool) {
     emailValue: email ? `${email.substring(0, 3)}***` : 'null',
     hasSupabaseUserId: !!supabaseUserId,
     supabaseUserIdType: typeof supabaseUserId,
-    supabaseUserIdValue: supabaseUserId ? `${supabaseUserId.substring(0, 8)}***` : 'null'
+    supabaseUserIdValue: supabaseUserId ? `${supabaseUserId.substring(0, 8)}***` : 'null',
+    hasMetadata: !!userMetadata,
+    metadataKeys: Object.keys(userMetadata || {})
   })
 
   if (!email && !supabaseUserId) {
@@ -163,10 +165,39 @@ async function getOrCreateUserByEmail(email, supabaseUserId, existingPool) {
     throw new Error('Invalid trial end date: date calculation failed')
   }
 
+  // Extract name information from metadata
+  const fullName = userMetadata?.name || userMetadata?.full_name || ''
+  const firstName = userMetadata?.first_name || userMetadata?.firstName || ''
+  const lastName = userMetadata?.last_name || userMetadata?.lastName || ''
+  
+  // If we have full name but no first_name, try to split it
+  let finalFirstName = firstName
+  let finalLastName = lastName
+  let finalName = fullName
+  
+  if (!finalFirstName && fullName) {
+    // Split full name into first and last name
+    const nameParts = fullName.trim().split(/\s+/)
+    finalFirstName = nameParts[0] || ''
+    finalLastName = nameParts.slice(1).join(' ') || null
+    finalName = fullName
+  } else if (!finalFirstName && !fullName) {
+    // No name provided, use email prefix or default
+    finalFirstName = normalizedEmail ? normalizedEmail.split('@')[0] : 'User'
+    finalName = finalFirstName
+  } else if (finalFirstName && !finalName) {
+    // We have first_name but no full name
+    finalName = finalLastName ? `${finalFirstName} ${finalLastName}` : finalFirstName
+  }
+
   logger.info('getOrCreateUserByEmail: Values validated, proceeding with INSERT', {
     normalizedEmail: normalizedEmail ? `${normalizedEmail.substring(0, 3)}***` : 'null',
     supabaseUserId: `${String(supabaseUserId).substring(0, 8)}***`,
-    trialEndDate: trialEndDate.toISOString()
+    trialEndDate: trialEndDate.toISOString(),
+    hasFirstName: !!finalFirstName,
+    firstNameLength: finalFirstName?.length || 0,
+    hasName: !!finalName,
+    nameLength: finalName?.length || 0
   })
 
   if (userResult.rows.length === 0) {
@@ -177,7 +208,9 @@ async function getOrCreateUserByEmail(email, supabaseUserId, existingPool) {
         hasEmail: !!normalizedEmail,
         emailValue: normalizedEmail ? `${normalizedEmail.substring(0, 3)}***` : 'null',
         supabaseUserId: `${String(supabaseUserId).substring(0, 8)}***`,
-        trialEndDate: trialEndDate.toISOString()
+        trialEndDate: trialEndDate.toISOString(),
+        firstName: finalFirstName ? `${finalFirstName.substring(0, 3)}***` : 'null',
+        name: finalName ? `${finalName.substring(0, 3)}***` : 'null'
       })
 
       // Ensure supabaseUserId is a valid UUID string (PostgreSQL requires proper UUID format)
@@ -193,22 +226,106 @@ async function getOrCreateUserByEmail(email, supabaseUserId, existingPool) {
         throw new Error(`Invalid UUID format for supabase_user_id: ${uuidValue.substring(0, 20)}...`)
       }
 
+      // Check if first_name column exists in the database
+      let hasFirstNameColumn = false
+      try {
+        const columnCheck = await pool.query(`
+          SELECT column_name, is_nullable
+          FROM information_schema.columns
+          WHERE table_schema = 'public' 
+            AND table_name = 'users' 
+            AND column_name = 'first_name'
+        `)
+        hasFirstNameColumn = columnCheck.rows.length > 0
+        logger.info('getOrCreateUserByEmail: Database schema check', {
+          hasFirstNameColumn,
+          isNullable: hasFirstNameColumn ? columnCheck.rows[0].is_nullable === 'YES' : null
+        })
+      } catch (schemaError) {
+        logger.warn('getOrCreateUserByEmail: Could not check for first_name column', {
+          error: schemaError.message
+        })
+        // Assume it exists if we can't check (safer to include it)
+        hasFirstNameColumn = true
+      }
+
+      // Check for name column
+      let hasNameColumn = false
+      try {
+        const nameColumnCheck = await pool.query(`
+          SELECT column_name
+          FROM information_schema.columns
+          WHERE table_schema = 'public' 
+            AND table_name = 'users' 
+            AND column_name = 'name'
+        `)
+        hasNameColumn = nameColumnCheck.rows.length > 0
+      } catch (err) {
+        // Ignore error, assume name column might not exist
+      }
+
+      // Build INSERT query dynamically based on schema
+      const insertColumns = [
+        'email',
+        'supabase_user_id',
+        'is_verified',
+        'trial_start_date',
+        'trial_end_date',
+        'subscription_status'
+      ]
+      
+      // Build placeholders and values arrays
+      const allPlaceholders = []
+      const queryValues = []
+      let paramIndex = 1
+      
+      // email
+      allPlaceholders.push(`$${paramIndex++}`)
+      queryValues.push(normalizedEmail)
+      
+      // supabase_user_id
+      allPlaceholders.push(`$${paramIndex++}::UUID`)
+      queryValues.push(uuidValue)
+      
+      // is_verified
+      allPlaceholders.push(`$${paramIndex++}`)
+      queryValues.push(true)
+      
+      // trial_start_date
+      allPlaceholders.push('NOW()')
+      
+      // trial_end_date
+      allPlaceholders.push(`$${paramIndex++}::TIMESTAMP`)
+      queryValues.push(trialEndDate)
+      
+      // subscription_status
+      allPlaceholders.push(`'trial'`)
+      
+      // first_name (if column exists)
+      if (hasFirstNameColumn) {
+        insertColumns.push('first_name')
+        allPlaceholders.push(`$${paramIndex++}`)
+        queryValues.push(finalFirstName)
+      }
+      
+      // name (if column exists and we have a name value)
+      if (hasNameColumn && finalName) {
+        insertColumns.push('name')
+        allPlaceholders.push(`$${paramIndex++}`)
+        queryValues.push(finalName)
+      }
+
       // Use explicit type casting, but handle NULL properly
       // PostgreSQL handles NULL values correctly without explicit casting, so only cast non-NULL values
       newUser = await pool.query(
         `
           INSERT INTO users (
-            email,
-            supabase_user_id,
-            is_verified,
-            trial_start_date,
-            trial_end_date,
-            subscription_status
+            ${insertColumns.join(', ')}
           )
-          VALUES ($1, $2::UUID, true, NOW(), $3::TIMESTAMP, 'trial')
+          VALUES (${allPlaceholders.join(', ')})
           RETURNING id
         `,
-        [normalizedEmail, uuidValue, trialEndDate]
+        queryValues
       )
       
       if (!newUser || !newUser.rows || newUser.rows.length === 0) {
@@ -678,12 +795,17 @@ router.post('/supabase-login', async (req, res) => {
     // Get or create user in database
     let userId, isNewUser
     try {
+      // Extract user metadata from token (user_metadata from Supabase)
+      const userMetadata = decodedToken.user_metadata || {}
+      
       logger.info(`[AUTH_FLOW] [${requestId}] Getting or creating user by email`, {
         requestId,
         email,
-        supabaseUserId
+        supabaseUserId,
+        hasMetadata: !!userMetadata,
+        metadataKeys: Object.keys(userMetadata)
       })
-      const userResult = await getOrCreateUserByEmail(email, supabaseUserId)
+      const userResult = await getOrCreateUserByEmail(email, supabaseUserId, null, userMetadata)
       userId = userResult.userId
       isNewUser = userResult.isNewUser
       logger.info(`[AUTH_FLOW] [${requestId}] User retrieved/created successfully`, {
