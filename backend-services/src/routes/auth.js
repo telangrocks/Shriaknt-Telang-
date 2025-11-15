@@ -129,10 +129,51 @@ async function getOrCreateUserByEmail(email, supabaseUserId, existingPool) {
   const trialEndDate = new Date()
   trialEndDate.setDate(trialEndDate.getDate() + trialDays)
 
+  // Validate all values before INSERT
+  if (!supabaseUserId || typeof supabaseUserId !== 'string' || supabaseUserId.trim().length === 0) {
+    logger.error('getOrCreateUserByEmail: Invalid supabaseUserId before INSERT', {
+      supabaseUserId,
+      type: typeof supabaseUserId
+    })
+    throw new Error('Invalid supabaseUserId: must be a non-empty UUID string')
+  }
+
+  // Email can be null, but if provided it must be valid
+  if (normalizedEmail !== null && (!normalizedEmail || typeof normalizedEmail !== 'string' || normalizedEmail.trim().length === 0)) {
+    logger.error('getOrCreateUserByEmail: Invalid normalizedEmail before INSERT', {
+      normalizedEmail,
+      originalEmail: email,
+      type: typeof normalizedEmail
+    })
+    throw new Error('Invalid email format: email must be a valid string or null')
+  }
+
+  // Validate trialEndDate
+  if (!trialEndDate || isNaN(trialEndDate.getTime())) {
+    logger.error('getOrCreateUserByEmail: Invalid trialEndDate before INSERT', {
+      trialEndDate,
+      trialDays
+    })
+    throw new Error('Invalid trial end date: date calculation failed')
+  }
+
+  logger.info('getOrCreateUserByEmail: Values validated, proceeding with INSERT', {
+    normalizedEmail: normalizedEmail ? `${normalizedEmail.substring(0, 3)}***` : 'null',
+    supabaseUserId: `${String(supabaseUserId).substring(0, 8)}***`,
+    trialEndDate: trialEndDate.toISOString()
+  })
+
   if (userResult.rows.length === 0) {
     // Create new user
     let newUser
     try {
+      logger.info('getOrCreateUserByEmail: Executing INSERT for new user', {
+        hasEmail: !!normalizedEmail,
+        emailValue: normalizedEmail ? `${normalizedEmail.substring(0, 3)}***` : 'null',
+        supabaseUserId: `${String(supabaseUserId).substring(0, 8)}***`,
+        trialEndDate: trialEndDate.toISOString()
+      })
+
       newUser = await pool.query(
         `
           INSERT INTO users (
@@ -206,16 +247,47 @@ async function getOrCreateUserByEmail(email, supabaseUserId, existingPool) {
         throw new Error('Invalid reference during user creation')
       }
       if (error.code === '23502') { // Not null violation
-        logger.error('Database NOT NULL constraint violation during user creation:', {
+        // Extract all possible error details
+        const errorDetails = {
           error: error.message,
+          code: error.code,
           constraint: error.constraint,
           table: error.table,
           column: error.column,
+          detail: error.detail,
+          hint: error.hint,
+          where: error.where,
+          schema: error.schema,
+          sqlState: error.sqlState,
           email: normalizedEmail,
-          supabaseUserId,
-          sqlState: error.sqlState
+          supabaseUserId: String(supabaseUserId).substring(0, 8) + '***',
+          allErrorKeys: Object.keys(error),
+          allErrorValues: {}
+        }
+        
+        // Safely extract error values (avoid circular refs)
+        Object.keys(error).forEach(key => {
+          try {
+            const value = error[key]
+            if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+              errorDetails.allErrorValues[key] = value
+            } else if (value === null || value === undefined) {
+              errorDetails.allErrorValues[key] = value
+            } else {
+              errorDetails.allErrorValues[key] = `[${typeof value}]`
+            }
+          } catch (e) {
+            errorDetails.allErrorValues[key] = '[unserializable]'
+          }
         })
-        throw new Error(`Required field missing during user creation: ${error.column || 'unknown field'}. Please ensure all required user data is provided.`)
+        
+        logger.error('Database NOT NULL constraint violation during user creation:', errorDetails)
+        
+        // Create a more helpful error message
+        const columnName = error.column || error.detail?.match(/column "([^"]+)"/i)?.[1] || 'unknown'
+        const helpfulMessage = `Required field '${columnName}' is missing or null. This is likely a database schema issue. Values being inserted: email=${normalizedEmail ? 'provided' : 'null'}, supabaseUserId=${supabaseUserId ? 'provided' : 'null'}`
+        
+        throw new Error(`Required field missing during user creation: ${columnName}. ${helpfulMessage}`)
       }
       if (error.code === 'ECONNREFUSED' || error.code === 'ETIMEDOUT') {
         throw new Error('Database connection failed. Please check DATABASE_URL and ensure the database is running.')
@@ -340,20 +412,49 @@ router.post('/supabase-login', async (req, res) => {
   })
 
   try {
+    // Log incoming request body for debugging
+    logger.info(`[AUTH_FLOW] [${requestId}] Request body received:`, {
+      requestId,
+      bodyKeys: Object.keys(req.body || {}),
+      hasAccessToken: !!req.body?.accessToken,
+      accessTokenType: typeof req.body?.accessToken,
+      bodyStringified: JSON.stringify(req.body || {}).substring(0, 200) // First 200 chars for safety
+    })
+
     const { accessToken } = req.body
 
     if (!accessToken) {
-      logger.warn(`[AUTH_FLOW] [${requestId}] Missing accessToken in request body`)
+      logger.error(`[AUTH_FLOW] [${requestId}] Missing accessToken in request body:`, {
+        requestId,
+        body: req.body,
+        bodyKeys: Object.keys(req.body || {}),
+        contentType: req.get('content-type')
+      })
       return res.status(400).json({
         error: 'Missing accessToken',
-        message: 'Supabase access token is required'
+        message: 'Supabase access token is required in the request body. Please ensure the access_token from Supabase is sent as "accessToken" field.'
+      })
+    }
+
+    // Validate accessToken is a string and not empty
+    if (typeof accessToken !== 'string' || accessToken.trim().length === 0) {
+      logger.error(`[AUTH_FLOW] [${requestId}] Invalid accessToken format:`, {
+        requestId,
+        accessTokenType: typeof accessToken,
+        accessTokenLength: accessToken?.length,
+        accessTokenValue: String(accessToken).substring(0, 50)
+      })
+      return res.status(400).json({
+        error: 'Invalid accessToken',
+        message: 'The access token must be a non-empty string.'
       })
     }
 
     logger.info(`[AUTH_FLOW] [${requestId}] Access token received`, {
       requestId,
       tokenLength: accessToken.length,
-      tokenPrefix: accessToken.substring(0, 20) + '...'
+      tokenPrefix: accessToken.substring(0, 20) + '...',
+      tokenSuffix: '...' + accessToken.substring(accessToken.length - 10)
     })
 
     if (!SUPABASE_JWT_SECRET) {
@@ -570,8 +671,21 @@ router.post('/supabase-login', async (req, res) => {
         errorMessage = 'User account already exists. Please try logging in instead.'
         httpStatus = 409 // Conflict
       } else if (error.message.includes('Required field missing')) {
-        errorMessage = 'Invalid user data provided. Please try again.'
+        // Extract the column name from the error message if available
+        const columnMatch = error.message.match(/column[:\s]+(\w+)/i)
+        const columnName = columnMatch ? columnMatch[1] : 'unknown'
+        errorMessage = `Invalid user data: required field '${columnName}' is missing. Please contact support if this issue persists.`
         httpStatus = 400 // Bad Request
+        // Log the detailed error for debugging
+        logger.error(`[BACKEND_ERROR] [${requestId}] Database NOT NULL violation details:`, {
+          requestId,
+          errorMessage: error.message,
+          errorCode: error.code,
+          column: columnName,
+          email: email,
+          supabaseUserId: supabaseUserId,
+          allErrorProps: Object.keys(error)
+        })
       } else if (error.code === '23505') { // Unique constraint violation
         errorMessage = 'User account already exists. Please try logging in instead.'
         httpStatus = 409 // Conflict
