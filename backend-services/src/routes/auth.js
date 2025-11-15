@@ -174,6 +174,20 @@ async function getOrCreateUserByEmail(email, supabaseUserId, existingPool) {
         trialEndDate: trialEndDate.toISOString()
       })
 
+      // Ensure supabaseUserId is a valid UUID string (PostgreSQL requires proper UUID format)
+      const uuidValue = String(supabaseUserId).trim()
+      
+      // Validate UUID format one more time before INSERT
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+      if (!uuidRegex.test(uuidValue)) {
+        logger.error('getOrCreateUserByEmail: Invalid UUID format before INSERT', {
+          supabaseUserId: uuidValue,
+          length: uuidValue.length
+        })
+        throw new Error(`Invalid UUID format for supabase_user_id: ${uuidValue.substring(0, 20)}...`)
+      }
+
+      // Use explicit type casting to ensure PostgreSQL accepts the values
       newUser = await pool.query(
         `
           INSERT INTO users (
@@ -184,10 +198,10 @@ async function getOrCreateUserByEmail(email, supabaseUserId, existingPool) {
             trial_end_date,
             subscription_status
           )
-          VALUES ($1, $2, true, NOW(), $3, 'trial')
+          VALUES ($1::VARCHAR(255), $2::UUID, true, NOW(), $3::TIMESTAMP, 'trial'::VARCHAR(50))
           RETURNING id
         `,
-        [normalizedEmail, supabaseUserId, trialEndDate]
+        [normalizedEmail, uuidValue, trialEndDate]
       )
       
       if (!newUser || !newUser.rows || newUser.rows.length === 0) {
