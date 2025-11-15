@@ -4,7 +4,24 @@ const { verifyToken, requireSubscription } = require('../middleware/auth');
 const { createPool } = require('../database/pool');
 const { acquireTradeLock, releaseTradeLock } = require('../services/redis');
 const logger = require('../utils/logger');
-const ccxt = require('ccxt');
+
+// Lazy-load ccxt to handle missing dependencies gracefully
+let ccxt = null;
+function getCcxt() {
+  if (!ccxt) {
+    try {
+      ccxt = require('ccxt');
+    } catch (error) {
+      logger.error('Failed to load ccxt library:', {
+        error: error.message,
+        name: error.name,
+        stack: error.stack
+      });
+      throw new Error('Trading library (ccxt) is not available. Please install dependencies: yarn install');
+    }
+  }
+  return ccxt;
+}
 
 // Execute trade
 router.post('/execute', verifyToken, requireSubscription, async (req, res) => {
@@ -66,7 +83,8 @@ router.post('/execute', verifyToken, requireSubscription, async (req, res) => {
       const exchangeKeys = keysResult.rows[0];
 
       // Initialize exchange
-      const ExchangeClass = ccxt[exchange_name];
+      const ccxtLib = getCcxt();
+      const ExchangeClass = ccxtLib[exchange_name];
       if (!ExchangeClass) {
         return res.status(400).json({
           error: 'Unsupported exchange',

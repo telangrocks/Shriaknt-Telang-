@@ -1,17 +1,41 @@
-const ccxt = require('ccxt');
 const { cacheMarketData } = require('./redis');
 const logger = require('../utils/logger');
+
+// Lazy-load ccxt to handle missing dependencies gracefully
+let ccxt = null;
+function getCcxt() {
+  if (!ccxt) {
+    try {
+      ccxt = require('ccxt');
+    } catch (error) {
+      logger.error('Failed to load ccxt library:', {
+        error: error.message,
+        name: error.name,
+        stack: error.stack
+      });
+      // Don't throw - return null and let the calling code handle it
+      return null;
+    }
+  }
+  return ccxt;
+}
 
 const exchanges = {};
 let marketDataInterval = null;
 
 // Initialize exchange instances
 function initializeExchanges() {
+  const ccxtLib = getCcxt();
+  if (!ccxtLib) {
+    logger.warn('ccxt library not available. Market data service will be unavailable.');
+    return;
+  }
+
   const supportedExchanges = (process.env.SUPPORTED_EXCHANGES || 'binance,bybit,okx').split(',');
 
   supportedExchanges.forEach(exchangeName => {
     try {
-      const ExchangeClass = ccxt[exchangeName];
+      const ExchangeClass = ccxtLib[exchangeName];
       if (ExchangeClass) {
         exchanges[exchangeName] = new ExchangeClass({
           enableRateLimit: true,
