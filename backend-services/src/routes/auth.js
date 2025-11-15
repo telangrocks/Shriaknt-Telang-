@@ -69,16 +69,22 @@ async function getOrCreateUserByEmail(email, supabaseUserId, existingPool) {
   }
 
   // Normalize email - ensure it's a valid string or null
+  // Email is optional in database, so null is acceptable
   let normalizedEmail = null
   if (email) {
     const trimmed = String(email).trim()
     if (trimmed.length > 0) {
       normalizedEmail = trimmed.toLowerCase()
-      // Validate email format
+      // Validate email format only if email is provided
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
       if (!emailRegex.test(normalizedEmail)) {
-        logger.error('getOrCreateUserByEmail: Invalid email format', { email, normalizedEmail })
-        throw new Error('Invalid email format provided')
+        logger.warn('getOrCreateUserByEmail: Invalid email format, proceeding with null email', { 
+          email, 
+          normalizedEmail,
+          note: 'Email is optional in database schema, will proceed with null'
+        })
+        // Email is optional, so set to null instead of throwing error
+        normalizedEmail = null
       }
     }
   }
