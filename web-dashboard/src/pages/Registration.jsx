@@ -38,6 +38,27 @@ const resolveAuthError = (error) => {
     return error
   }
 
+  // Handle Supabase 422 errors with specific messages
+  if (error?.status === 422) {
+    if (error?.error_description) {
+      return error.error_description
+    }
+    if (error?.message) {
+      // Map common Supabase error codes to user-friendly messages
+      if (error.message.includes('password')) {
+        return 'Password does not meet requirements. Please use at least 8 characters.'
+      }
+      if (error.message.includes('email') || error.message.includes('Email')) {
+        return 'Invalid email address. Please check your email format.'
+      }
+      if (error.message.includes('already registered') || error.message.includes('already exists')) {
+        return 'This email is already registered. Please sign in instead.'
+      }
+      return error.message
+    }
+    return 'Invalid signup data. Please check your email and password.'
+  }
+
   if (error?.error_description) {
     return error.error_description
   }
@@ -48,6 +69,10 @@ const resolveAuthError = (error) => {
 
   if (error?.data?.msg) {
     return error.data.msg
+  }
+
+  if (error?.hint) {
+    return error.hint
   }
 
   return 'Authentication failed. Please try again.'
@@ -209,19 +234,45 @@ const Registration = ({ setIsAuthenticated }) => {
         console.log(`[AUTH_FLOW] [${requestId}] Signing up user:`, {
           requestId,
           email: normalizedEmail,
+          emailLength: normalizedEmail.length,
+          passwordLength: password.length,
           timestamp: new Date().toISOString()
         })
 
-        // Sign up with email and password (no email confirmation required)
+        // Validate inputs before sending to Supabase
+        if (!normalizedEmail || normalizedEmail.trim().length === 0) {
+          throw new Error('Email is required for signup')
+        }
+        if (!password || password.length < MIN_PASSWORD_LENGTH) {
+          throw new Error(`Password must be at least ${MIN_PASSWORD_LENGTH} characters long`)
+        }
+
+        // Sign up with email and password
+        // Remove emailRedirectTo if undefined (Supabase may reject undefined values)
+        const signUpOptions = {
+          data: {
+            email: normalizedEmail
+          }
+        }
+
+        // Only add emailRedirectTo if we want to set it explicitly
+        // Omitting it allows Supabase to use its default behavior
+        
         result = await supabase.auth.signUp({
           email: normalizedEmail,
           password: password,
-          options: {
-            emailRedirectTo: undefined, // No email confirmation
-            data: {
-              email: normalizedEmail
-            }
-          }
+          options: signUpOptions
+        })
+        
+        // Log the full result for debugging
+        console.log(`[AUTH_FLOW] [${requestId}] Signup result:`, {
+          requestId,
+          hasError: !!result.error,
+          error: result.error,
+          hasSession: !!result.data?.session,
+          hasUser: !!result.data?.user,
+          userEmail: result.data?.user?.email,
+          userId: result.data?.user?.id
         })
       } else {
         console.log(`[AUTH_FLOW] [${requestId}] Signing in user:`, {
@@ -240,14 +291,35 @@ const Registration = ({ setIsAuthenticated }) => {
       const duration = Date.now() - startTime
 
       if (result.error) {
-        console.error(`[AUTH_FLOW] [${requestId}] Authentication failed:`, {
+        // Enhanced error logging for Supabase errors
+        const errorDetails = {
           requestId,
-          error: result.error.message,
+          message: result.error.message,
           name: result.error.name,
           status: result.error.status,
           code: result.error.code,
+          error: result.error.error,
+          errorDescription: result.error.error_description,
+          errorHint: result.error.hint,
+          fullError: result.error,
           duration: `${duration}ms`
-        })
+        }
+        
+        console.error(`[AUTH_FLOW] [${requestId}] Authentication failed:`, errorDetails)
+        
+        // Log Supabase-specific error details
+        if (result.error.status === 422) {
+          console.error(`[AUTH_FLOW] [${requestId}] Supabase 422 error details:`, {
+            requestId,
+            errorCode: result.error.code,
+            errorMessage: result.error.message,
+            errorDescription: result.error.error_description,
+            hint: result.error.hint,
+            email: normalizedEmail,
+            passwordLength: password.length,
+            note: '422 usually means invalid request data - check email format, password requirements, or missing fields'
+          })
+        }
         
         // Handle "user already exists" error during signup
         if (isSignUp && result.error.code === 'user_already_exists') {
